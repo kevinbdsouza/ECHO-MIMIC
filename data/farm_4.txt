@@ -1,0 +1,26 @@
+Generation - 0 : Best Score - 1.5703062879912053
+Generation - 1 : Best Score - 1.8253215861365861
+Generation - 2 : Best Score - 1.9142149987260428
+Generation - 3 : Best Score - 2.5163097261245135
+Generation - 4 : Best Score - 2.5163097261245135
+Generation - 5 : Best Score - 2.5163097261245135
+Generation - 6 : Best Score - 2.5878604903127607
+Generation - 7 : Best Score - 2.5878604903127607
+Generation - 8 : Best Score - 2.5878604903127607
+Generation - 9 : Best Score - 2.8388430482501685
+Generation - 10 : Best Score - 2.8388430482501685
+Generation - 11 : Best Score - 3.2186231475952725
+Generation - 12 : Best Score - 3.2839986892061788
+Generation - 13 : Best Score - 3.530443663662452
+Generation - 14 : Best Score - 3.9383978106085813
+Generation - 15 : Best Score - 3.9383978106085813
+Generation - 16 : Best Score - 5.556645378544256
+Generation - 17 : Best Score - 5.894375918304156
+Generation - 18 : Best Score - 5.962942749073469
+Generation - 19 : Best Score - 6.025369589533775
+Generation - 20 : Best Score - 6.281454359197026
+Generation - 21 : Best Score - 6.281454359197026
+Generation - 22 : Best Score - 7.7537950953908155
+Generation - 23 : Best Score - 9.30909980762518
+Generation - 24 : Best Score - 9.30909980762518
+

@@ -1,0 +1,2 @@
+Generation - 0 : Best Score - 100.0
+Generation - 1 : Best Score - 100.0

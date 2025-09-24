@@ -1,0 +1,11 @@
+Generation - 0 : Best Score - 4.89169075846944
+Generation - 1 : Best Score - 4.89169075846944
+Generation - 2 : Best Score - 4.89169075846944
+Generation - 3 : Best Score - 5.2148140080969645
+Generation - 4 : Best Score - 5.2148140080969645
+Generation - 5 : Best Score - 6.78008301784965
+Generation - 6 : Best Score - 7.428397518917852
+Generation - 7 : Best Score - 7.428397518917852
+Generation - 8 : Best Score - 9.429771568065943
+Generation - 9 : Best Score - 9.429771568065943
+Generation - 10 : Best Score - 11.97929059417201

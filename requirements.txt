@@ -1,0 +1,29 @@
+# ECHO-MIMIC Project Dependencies
+
+# Core ML and AI frameworks
+dspy-ai
+google-generativeai
+openai
+
+# Data science and analysis
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+geojson
+shapely
+geopandas
+cartopy
+rasterio
+
+litellm<1.76.1
+
+# Code analysis and metrics
+radon
+
+# Statistical modeling
+statsmodels
+
+# Environment management
+python-dotenv
