@@ -1,0 +1,589 @@
+Instructions: Your task is to come up with a message to the farmers in order to change their behaviour from following the ecological intensification heuristics that benefits solely their farm to following the ecological connectivity heuristics that increase landscape connectivity. Your communication to the farmer can be persuasive. It can provide incentives such as reducing the implementation or maintenance cost of an intervention by providing a one-time subsidy or yearly subsidies. It can compensate the farmers for yield that is lost to habitat conversion. It can communicate the benefits of landscape connectivity, and so on. 
+
+The ecological intensification heuristics the farmer is currently following are:
+ ```python
+import json
+import math
+import numpy as np
+
+def community_connectivity_heuristic(input_geojson_file='input.geojson'):
+    """
+    Heuristic based on community value and connectivity of interventions.
+    - Community Value Bonus for Habitat Conversion: Habitat conversion gets a bonus if near 'residential' areas.
+    - Connectivity with Existing Margin Interventions: Favors habitat conversion if neighbors have high margin intervention.
+    """
+
+    crop_prices = {'Soybeans': 370, 'Oats': 95, 'Corn': 190, 'Canola/rapeseed': 1100, 'Barley': 120, 'Spring wheat': 200}
+    costs = {
+        'margin': {'implementation': 400, 'maintenance': 60},
+        'habitat': {'implementation': 300, 'maintenance': 70},
+        'agriculture': {'maintenance': 100}
+    }
+    default_crop_price = 200
+    margin_maintenance_cost = costs['margin']['maintenance']
+    time_horizon = 10
+    initial_discount_rate = 0.10
+    long_term_discount_rate = 0.02
+
+    threshold_high_profit = 2 * margin_maintenance_cost
+    threshold_medium_profit = margin_maintenance_cost
+    min_area_for_margin = 0.5
+    sigmoid_midpoint_default = 50
+    sigmoid_steepness = 0.05
+    very_low_net_value_threshold = -10
+    risk_aversion_factor = 10
+    crop_margin_benefit = {'Soybeans': 0.12, 'Oats': 0.08, 'Corn': 0.1, 'Canola/rapeseed': 0.15, 'Barley': 0.07, 'Spring wheat': 0.09, 'Unknown': 0.1}
+    community_value_bonus = 100  # Bonus value for habitat conversion near residential areas
+    high_margin_neighbor_threshold = 0.5 # Threshold for considering a neighbor as having high margin intervention
+    neighbor_margin_intervention_connectivity_threshold = 0.5 # Percentage of neighbors with high margin intervention to trigger connectivity effect
+
+    with open(input_geojson_file, 'r') as f:
+        input_geojson = json.load(f)
+
+    output_features = []
+
+    total_yield = 0
+    ag_plot_count = 0
+    for feature in input_geojson['features']:
+        if feature['properties']['type'] == 'ag_plot':
+            total_yield += feature['properties'].get('yield', 0)
+            ag_plot_count += 1
+    average_yield = total_yield / ag_plot_count if ag_plot_count > 0 else 1
+
+
+    feature_interventions_community = [] # Store interventions for each feature
+    for i, feature in enumerate(input_geojson['features']):
+        properties = feature['properties']
+        plot_type = properties['type']
+        yield_val = properties['yield']
+        label = properties.get('label', 'Unknown Crop')
+        area = properties.get('area', 1.0)
+        geometry = feature['geometry']
+
+        margin_intervention = 0.0
+        habitat_conversion = 0.0
+
+        if plot_type == 'hab_plots':
+            pass
+        elif plot_type == 'ag_plot':
+            crop_price = crop_prices.get(label, default_crop_price)
+            revenue_potential = yield_val * crop_price
+            profit_margin_margin = revenue_potential - margin_maintenance_cost
+
+            neighbor_yields = []
+            if i > 0 and i < len(input_geojson['features']) and input_geojson['features'][i-1]['properties']['type'] == 'ag_plot':
+                neighbor_yields.append(input_geojson['features'][i-1]['properties']['yield'])
+            if i < len(input_geojson['features']) - 1 and input_geojson['features'][i+1]['properties']['type'] == 'ag_plot':
+                neighbor_yields.append(input_geojson['features'][i+1]['properties']['yield'])
+
+            spatial_influence = np.mean(neighbor_yields) if neighbor_yields else 0
+            adjusted_yield = yield_val + 0.1 * spatial_influence
+
+            slope = properties.get('slope', 0)
+            margin_implementation_cost = costs['margin']['implementation'] * (1 + 0.1 * slope)
+            habitat_implementation_cost = costs['habitat']['implementation'] * (1 + 0.1 * slope)
+
+            margin_npv = -margin_implementation_cost
+            habitat_npv = -habitat_implementation_cost
+
+            for year in range(1, time_horizon + 1):
+                discount_rate = initial_discount_rate * math.exp(-0.2 * year) + long_term_discount_rate
+                discount_factor = 1 / (1 + discount_rate)**year
+
+                yield_increase = adjusted_yield * crop_margin_benefit.get(label, 0.1)
+                revenue_margin = (adjusted_yield + yield_increase) * crop_price - adjusted_yield * costs['agriculture']['maintenance'] - costs['margin']['maintenance']
+
+                pollination_increase_margin = 0.01 * (1/(1 + math.exp(-0.1 * (year-5))))
+                pest_control_increase_margin = 0.005 * (1/(1 + math.exp(-0.2 * (year-2))))
+                ecosystem_service_value_margin = (pollination_increase_margin + pest_control_increase_margin) * 500
+
+                revenue_margin += ecosystem_service_value_margin
+                margin_npv += revenue_margin * discount_factor
+
+                converted_yield = 0.3
+                revenue_habitat = converted_yield * crop_price - converted_yield * costs['agriculture']['maintenance'] - converted_yield * costs['habitat']['maintenance']
+
+                pollination_increase_habitat = 0.02 * (1/(1 + math.exp(-0.1 * (year-3))))
+                pest_control_increase_habitat = 0.01 * (1/(1 + math.exp(-0.2 * (year-1))))
+                ecosystem_service_value_habitat = (pollination_increase_habitat + pest_control_increase_habitat) * 500
+
+                revenue_habitat += ecosystem_service_value_habitat
+
+                # Community Value Bonus: Check for nearby residential areas (Placeholder condition)
+                is_near_residential = False
+                for other_feature in input_geojson['features']:
+                    if other_feature != feature and other_feature['properties'].get('land_use') == 'residential': # Example property 'land_use'
+                        if 'coordinates' in feature['geometry'] and 'coordinates' in other_feature['geometry']:
+                            try:
+                                dx = feature['geometry']['coordinates'][0][0][0] - other_feature['geometry']['coordinates'][0][0][0]
+                                dy = feature['geometry']['coordinates'][0][0][1] - other_feature['geometry']['coordinates'][0][0][1]
+                                distance = math.sqrt(dx*dx + dy*dy)
+                                if distance < 0.02: # Adjust distance threshold as needed
+                                    is_near_residential = True
+                                    break # No need to check other residential areas if one is close
+                            except (TypeError, IndexError) as e:
+                                print(f"Error calculating distance for community bonus: {e}")
+                                continue
+                if is_near_residential:
+                    revenue_habitat += community_value_bonus # Add bonus to habitat revenue
+
+                habitat_npv += revenue_habitat * discount_factor
+
+
+            risk_premium_margin = 0
+            risk_premium_habitat = 0
+            if yield_val < average_yield:
+                risk_premium_margin = risk_aversion_factor * abs(min(0, yield_val - average_yield))
+                risk_premium_habitat = risk_aversion_factor * abs(min(0, yield_val - average_yield))
+                margin_npv -= risk_premium_margin
+                habitat_npv -= risk_premium_habitat
+
+
+            net_value_potential = profit_margin_margin
+            sigmoid_midpoint = sigmoid_midpoint_default
+            if yield_val > 2.0:
+                sigmoid_midpoint -= 20
+            elif 0.5 < yield_val <= 2.0:
+                if label == 'Oats':
+                    sigmoid_midpoint += 10
+                elif label == 'Canola/rapeseed':
+                    sigmoid_midpoint -= 15
+                else:
+                    sigmoid_midpoint -= 5
+
+            sigmoid_value = 1 / (1 + math.exp(-sigmoid_steepness * (net_value_potential - sigmoid_midpoint)))
+            margin_intervention = sigmoid_value
+
+            if profit_margin_margin > threshold_high_profit:
+                margin_intervention = max(margin_intervention, 0.75)
+            elif threshold_medium_profit < profit_margin_margin <= threshold_high_profit:
+                margin_intervention = max(margin_intervention, 0.25 * (profit_margin_margin - threshold_medium_profit) / (threshold_high_profit - threshold_medium_profit))
+            elif profit_margin_margin <= threshold_medium_profit and profit_margin_margin >= 0:
+                margin_intervention = max(margin_intervention, 0.1 * profit_margin_margin / threshold_medium_profit)
+            elif profit_margin_margin < 0:
+                margin_intervention = 0.0
+
+            if margin_intervention <= 0.1 and 0.6 < yield_val < 2.0:
+                high_yield_threshold_parent2 = 2.0
+                low_yield_threshold_parent2 = 0.6
+                margin_intervention = max(margin_intervention, min(1.0, (yield_val - low_yield_threshold_parent2) / (high_yield_threshold_parent2 - low_yield_threshold_parent2)))
+
+            total_neighboring_habitat_area = 0
+            for other_feature in input_geojson['features']:
+                if other_feature != feature and other_feature['properties']['type'] == 'hab_plots':
+                    if 'coordinates' in feature['geometry'] and 'coordinates' in other_feature['geometry']:
+                        try:
+                            dx = feature['geometry']['coordinates'][0][0][0] - other_feature['geometry']['coordinates'][0][0][0]
+                            dy = feature['geometry']['coordinates'][0][0][1] - other_feature['geometry']['coordinates'][0][0][1]
+                            distance = math.sqrt(dx*dx + dy*dy)
+                            if distance < 0.01:
+                                total_neighboring_habitat_area += other_feature['properties'].get('area', 0.1)
+                        except (TypeError, IndexError) as e:
+                            print(f"Error calculating distance for neighboring habitat: {e}")
+                            continue
+
+
+            if total_neighboring_habitat_area > 0:
+                margin_intervention *= 0.5 * (1/(1+math.exp(-total_neighboring_habitat_area)))
+                habitat_conversion *= (1 - 0.2 * (1/(1+math.exp(-total_neighboring_habitat_area))))
+
+
+            if area < min_area_for_margin:
+                margin_intervention *= (area / min_area_for_margin)
+
+            if label in ['Canola/rapeseed', 'Soybeans']:
+                margin_intervention = min(1.0, margin_intervention * 1.2)
+
+            if i == 0 or i == len(input_geojson['features']) - 1:
+                margin_intervention = min(1.0, margin_intervention + 0.1)
+
+            if net_value_potential < very_low_net_value_threshold:
+                margin_intervention = 0.0
+                habitat_conversion = 1.0
+            elif yield_val <= 0.5:
+                if label in ['Spring wheat', 'Barley']:
+                    habitat_conversion = 0.0
+                else:
+                    habitat_conversion = 1.0
+            else:
+                npv_difference = habitat_npv - margin_npv
+                npv_difference = max(-100, min(100, npv_difference))
+                habitat_conversion = 1 / (1 + math.exp(-0.1 * npv_difference))
+
+
+            area_scaling_factor = min(1.0, 5.0 / (area + 0.00001))
+            habitat_conversion *= area_scaling_factor
+
+            # Connectivity with Existing Margin Interventions
+            high_margin_neighbors_count = 0
+            neighbor_count = 0
+            for other_feature in input_geojson['features']:
+                if other_feature != feature and other_feature['properties']['type'] == 'ag_plot':
+                    if 'coordinates' in feature['geometry'] and 'coordinates' in other_feature['geometry']:
+                        try:
+                            dx = feature['geometry']['coordinates'][0][0][0] - other_feature['geometry']['coordinates'][0][0][0]
+                            dy = feature['geometry']['coordinates'][0][0][1] - other_feature['geometry']['coordinates'][0][0][1]
+                            distance = math.sqrt(dx*dx + dy*dy)
+                            if distance < 0.02: # Consider neighbors within a small distance
+                                neighbor_count += 1
+                                if other_feature['properties'].get('margin_intervention', 0) > high_margin_neighbor_threshold:
+                                    high_margin_neighbors_count += 1
+                        except (TypeError, IndexError) as e:
+                            print(f"Error calculating distance for intervention connectivity: {e}")
+                            continue
+
+            if neighbor_count > 0:
+                high_margin_neighbor_ratio = high_margin_neighbors_count / neighbor_count
+                if high_margin_neighbor_ratio > neighbor_margin_intervention_connectivity_threshold:
+                    habitat_conversion = max(habitat_conversion, 0.6) # Increase habitat conversion if many neighbors have high margin intervention
+                    margin_intervention = min(margin_intervention, 0.4) # Decrease margin intervention in this case
+
+
+        else: # hab_plots
+            margin_intervention = 0.0
+            habitat_conversion = 0.0
+
+        feature_interventions_community.append({'margin_intervention': margin_intervention, 'habitat_conversion': habitat_conversion})
+
+
+    return feature_interventions_community
+
+
+def soil_climate_resilience_heuristic(input_geojson_file='input.geojson'):
+    """
+    Heuristic based on soil health and climate resilience.
+    - Soil Health Penalty for Agriculture: Penalizes agricultural revenue based on soil health.
+    - Climate Resilience Bonus for Habitat Conversion: Habitat conversion gets a climate resilience bonus that increases over time.
+    """
+
+    crop_prices = {'Soybeans': 370, 'Oats': 95, 'Corn': 190, 'Canola/rapeseed': 1100, 'Barley': 120, 'Spring wheat': 200}
+    costs = {
+        'margin': {'implementation': 400, 'maintenance': 60},
+        'habitat': {'implementation': 300, 'maintenance': 70},
+        'agriculture': {'maintenance': 100}
+    }
+    default_crop_price = 200
+    margin_maintenance_cost = costs['margin']['maintenance']
+    time_horizon = 10
+    initial_discount_rate = 0.10
+    long_term_discount_rate = 0.02
+
+    threshold_high_profit = 2 * margin_maintenance_cost
+    threshold_medium_profit = margin_maintenance_cost
+    min_area_for_margin = 0.5
+    sigmoid_midpoint_default = 50
+    sigmoid_steepness = 0.05
+    very_low_net_value_threshold = -10
+    risk_aversion_factor = 10
+    crop_margin_benefit = {'Soybeans': 0.12, 'Oats': 0.08, 'Corn': 0.1, 'Canola/rapeseed': 0.15, 'Barley': 0.07, 'Spring wheat': 0.09, 'Unknown': 0.1}
+    climate_resilience_bonus_base = 20 # Base climate resilience bonus
+    soil_health_penalty_factor = 0.5 # Factor to reduce agricultural revenue based on soil health
+
+
+    with open(input_geojson_file, 'r') as f:
+        input_geojson = json.load(f)
+
+    output_features = []
+
+    total_yield = 0
+    ag_plot_count = 0
+    for feature in input_geojson['features']:
+        if feature['properties']['type'] == 'ag_plot':
+            total_yield += feature['properties'].get('yield', 0)
+            ag_plot_count += 1
+    average_yield = total_yield / ag_plot_count if ag_plot_count > 0 else 1
+
+    feature_interventions_soil_climate = [] # Store interventions for each feature
+
+    for i, feature in enumerate(input_geojson['features']):
+        properties = feature['properties']
+        plot_type = properties['type']
+        yield_val = properties['yield']
+        label = properties.get('label', 'Unknown Crop')
+        area = properties.get('area', 1.0)
+        geometry = feature['geometry']
+        soil_health = properties.get('soil_health', 0.7) # Assume soil_health property, default to 0.7 if missing (scale 0 to 1, 1 is best)
+
+
+        margin_intervention = 0.0
+        habitat_conversion = 0.0
+
+        if plot_type == 'hab_plots':
+            pass
+        elif plot_type == 'ag_plot':
+            crop_price = crop_prices.get(label, default_crop_price)
+            revenue_potential = yield_val * crop_price
+            profit_margin_margin = revenue_potential - margin_maintenance_cost
+
+            neighbor_yields = []
+            if i > 0 and i < len(input_geojson['features']) and input_geojson['features'][i-1]['properties']['type'] == 'ag_plot':
+                neighbor_yields.append(input_geojson['features'][i-1]['properties']['yield'])
+            if i < len(input_geojson['features']) - 1 and input_geojson['features'][i+1]['properties']['type'] == 'ag_plot':
+                neighbor_yields.append(input_geojson['features'][i+1]['properties']['yield'])
+
+            spatial_influence = np.mean(neighbor_yields) if neighbor_yields else 0
+            adjusted_yield = yield_val + 0.1 * spatial_influence
+
+            slope = properties.get('slope', 0)
+            margin_implementation_cost = costs['margin']['implementation'] * (1 + 0.1 * slope)
+            habitat_implementation_cost = costs['habitat']['implementation'] * (1 + 0.1 * slope)
+
+            margin_npv = -margin_implementation_cost
+            habitat_npv = -habitat_implementation_cost
+
+            for year in range(1, time_horizon + 1):
+                discount_rate = initial_discount_rate * math.exp(-0.2 * year) + long_term_discount_rate
+                discount_factor = 1 / (1 + discount_rate)**year
+
+                yield_increase = adjusted_yield * crop_margin_benefit.get(label, 0.1)
+                revenue_margin = (adjusted_yield + yield_increase) * crop_price - adjusted_yield * costs['agriculture']['maintenance'] - costs['margin']['maintenance']
+
+                pollination_increase_margin = 0.01 * (1/(1 + math.exp(-0.1 * (year-5))))
+                pest_control_increase_margin = 0.005 * (1/(1 + math.exp(-0.2 * (year-2))))
+                ecosystem_service_value_margin = (pollination_increase_margin + pest_control_increase_margin) * 500
+
+                # Soil Health Penalty: Reduce revenue based on soil_health (lower soil_health -> higher penalty)
+                revenue_margin *= (1 - (1 - soil_health) * soil_health_penalty_factor) # Penalty increases as soil_health decreases
+
+                revenue_margin += ecosystem_service_value_margin
+                margin_npv += revenue_margin * discount_factor
+
+                converted_yield = 0.3
+                revenue_habitat = converted_yield * crop_price - converted_yield * costs['agriculture']['maintenance'] - converted_yield * costs['habitat']['maintenance']
+
+                pollination_increase_habitat = 0.02 * (1/(1 + math.exp(-0.1 * (year-3))))
+                pest_control_increase_habitat = 0.01 * (1/(1 + math.exp(-0.2 * (year-1))))
+                ecosystem_service_value_habitat = (pollination_increase_habitat + pest_control_increase_habitat) * 500
+
+                revenue_habitat += ecosystem_service_value_habitat
+
+                # Climate Resilience Bonus: Add bonus to habitat revenue, increasing with time
+                climate_bonus = climate_resilience_bonus_base * year # Bonus increases each year
+                revenue_habitat += climate_bonus
+
+                habitat_npv += revenue_habitat * discount_factor
+
+
+            risk_premium_margin = 0
+            risk_premium_habitat = 0
+            if yield_val < average_yield:
+                risk_premium_margin = risk_aversion_factor * abs(min(0, yield_val - average_yield))
+                risk_premium_habitat = risk_aversion_factor * abs(min(0, yield_val - average_yield))
+                margin_npv -= risk_premium_margin
+                habitat_npv -= risk_premium_habitat
+
+
+            net_value_potential = profit_margin_margin
+            sigmoid_midpoint = sigmoid_midpoint_default
+            if yield_val > 2.0:
+                sigmoid_midpoint -= 20
+            elif 0.5 < yield_val <= 2.0:
+                if label == 'Oats':
+                    sigmoid_midpoint += 10
+                elif label == 'Canola/rapeseed':
+                    sigmoid_midpoint -= 15
+                else:
+                    sigmoid_midpoint -= 5
+
+            sigmoid_value = 1 / (1 + math.exp(-sigmoid_steepness * (net_value_potential - sigmoid_midpoint)))
+            margin_intervention = sigmoid_value
+
+            if profit_margin_margin > threshold_high_profit:
+                margin_intervention = max(margin_intervention, 0.75)
+            elif threshold_medium_profit < profit_margin_margin <= threshold_high_profit:
+                margin_intervention = max(margin_intervention, 0.25 * (profit_margin_margin - threshold_medium_profit) / (threshold_high_profit - threshold_medium_profit))
+            elif profit_margin_margin <= threshold_medium_profit and profit_margin_margin >= 0:
+                margin_intervention = max(margin_intervention, 0.1 * profit_margin_margin / threshold_medium_profit)
+            elif profit_margin_margin < 0:
+                margin_intervention = 0.0
+
+            if margin_intervention <= 0.1 and 0.6 < yield_val < 2.0:
+                high_yield_threshold_parent2 = 2.0
+                low_yield_threshold_parent2 = 0.6
+                margin_intervention = max(margin_intervention, min(1.0, (yield_val - low_yield_threshold_parent2) / (high_yield_threshold_parent2 - low_yield_threshold_parent2)))
+
+            total_neighboring_habitat_area = 0
+            for other_feature in input_geojson['features']:
+                if other_feature != feature and other_feature['properties']['type'] == 'hab_plots':
+                    if 'coordinates' in feature['geometry'] and 'coordinates' in other_feature['geometry']:
+                        try:
+                            dx = feature['geometry']['coordinates'][0][0][0] - other_feature['geometry']['coordinates'][0][0][0]
+                            dy = feature['geometry']['coordinates'][0][0][1] - other_feature['geometry']['coordinates'][0][0][1]
+                            distance = math.sqrt(dx*dx + dy*dy)
+                            if distance < 0.01:
+                                total_neighboring_habitat_area += other_feature['properties'].get('area', 0.1)
+                        except (TypeError, IndexError) as e:
+                            print(f"Error calculating distance for neighboring habitat: {e}")
+                            continue
+
+
+            if total_neighboring_habitat_area > 0:
+                margin_intervention *= 0.5 * (1/(1+math.exp(-total_neighboring_habitat_area)))
+                habitat_conversion *= (1 - 0.2 * (1/(1+math.exp(-total_neighboring_habitat_area))))
+
+
+            if area < min_area_for_margin:
+                margin_intervention *= (area / min_area_for_margin)
+
+            if label in ['Canola/rapeseed', 'Soybeans']:
+                margin_intervention = min(1.0, margin_intervention * 1.2)
+
+            if i == 0 or i == len(input_geojson['features']) - 1:
+                margin_intervention = min(1.0, margin_intervention + 0.1)
+
+            if net_value_potential < very_low_net_value_threshold:
+                margin_intervention = 0.0
+                habitat_conversion = 1.0
+            elif yield_val <= 0.5:
+                if label in ['Spring wheat', 'Barley']:
+                    habitat_conversion = 0.0
+                else:
+                    habitat_conversion = 1.0
+            else:
+                npv_difference = habitat_npv - margin_npv
+                npv_difference = max(-100, min(100, npv_difference))
+                habitat_conversion = 1 / (1 + math.exp(-0.1 * npv_difference))
+
+
+            area_scaling_factor = min(1.0, 5.0 / (area + 0.00001))
+            habitat_conversion *= area_scaling_factor
+
+        else: # hab_plots
+            margin_intervention = 0.0
+            habitat_conversion = 0.0
+        feature_interventions_soil_climate.append({'margin_intervention': margin_intervention, 'habitat_conversion': habitat_conversion})
+
+
+    return feature_interventions_soil_climate
+
+
+if __name__ == '__main__':
+    community_interventions = community_connectivity_heuristic()
+    soil_climate_interventions = soil_climate_resilience_heuristic()
+
+    with open('input.geojson', 'r') as f:
+        input_geojson = json.load(f)
+
+    output_features = []
+    for i, feature in enumerate(input_geojson['features']):
+        properties = feature['properties']
+
+        # Get interventions from both heuristics
+        community_int = community_interventions[i]
+        soil_climate_int = soil_climate_interventions[i]
+
+        # Average the interventions
+        margin_intervention = (community_int['margin_intervention'] + soil_climate_int['margin_intervention']) / 2.0
+        habitat_conversion = (community_int['habitat_conversion'] + soil_climate_int['habitat_conversion']) / 2.0
+
+        properties['margin_intervention'] = margin_intervention
+        properties['habitat_conversion'] = habitat_conversion
+        output_features.append({"type": "Feature", "properties": properties, "geometry": feature['geometry']})
+
+    output_geojson = {
+        "type": "FeatureCollection",
+        "name": "output_combined_heuristic",
+        "crs": input_geojson.get("crs"),
+        "features": output_features
+    }
+
+    output_geojson_file = 'output.geojson'
+    with open(output_geojson_file, 'w') as f:
+        json.dump(output_geojson, f, indent=2)
+
+    print(f"Output GeoJSON with combined heuristic predicted interventions saved to {output_geojson_file}")
+``` 
+The ecological connectivity heuristics that you should nudge them towards are:
+ ```python
+import json
+
+def predict_interventions():
+    with open('input.geojson', 'r') as f:
+        input_geojson = json.load(f)
+
+    output_interventions = []
+
+    for feature in input_geojson['features']:
+        if feature['properties']['type'] == 'ag_plot':
+            plot_id = feature['properties']['id']
+            plot_type = feature['properties']['type']
+            label = feature['properties']['label']
+            plot_yield = feature['properties']['yield']
+
+            margin_directions = []
+            habitat_directions = []
+
+            if plot_yield <= 0.5:
+                habitat_directions = ["north-west", "north-east", "south-west", "south-east"]
+                if label in ['Spring wheat', 'Oats', 'Barley', 'Soybeans']:
+                    margin_directions = ["north-west", "north-east", "south-west", "south-east"] # Default margins for very low yield
+                else: # Corn, Canola etc.
+                    margin_directions = [] # Conservative margins for other crops at very low yield
+
+                if plot_id == 2: # Special case from hint, adjust margins based on hint for plot 2
+                    margin_directions = ["south-west", "south-east"]
+                if plot_id == 7: # Special case from hint, adjust margins based on hint for plot 7
+                    margin_directions = ["north-west"]
+                if plot_id == 9: # Special case from hint, adjust margins based on hint for plot 9
+                    margin_directions = ["north-east", "south-west", "south-east"]
+
+
+            elif plot_yield <= 1.7:
+                habitat_directions = []
+                if label in ['Spring wheat', 'Oats', 'Barley', 'Soybeans']:
+                    margin_directions = ["north-west", "north-east", "south-west", "south-east"] # Default margins for low yield
+                else: # Corn, Canola etc.
+                    margin_directions = ["north-west", "north-east"] # Conservative margins for other crops at low yield
+
+                if plot_id == 6: # Special case from hint, adjust margins based on hint for plot 6
+                    margin_directions = ["north-west", "south-east"]
+                    habitat_directions = ["north-west", "north-east", "south-west", "south-east"]
+
+
+            elif plot_yield <= 2.6:
+                habitat_directions = []
+                if label in ['Spring wheat', 'Oats', 'Barley', 'Soybeans']:
+                     margin_directions = ["north-west", "north-east", "south-west"] # Reduced margins for medium yield
+                else:
+                    margin_directions = ["north-west"] # More conservative for other crops at medium yield
+
+                if plot_id == 3: # Special case from hint, adjust margins based on hint for plot 3
+                    margin_directions = ["north-west", "north-east", "south-west"]
+                    habitat_directions = ["north-west", "north-east", "south-west", "south-east"]
+
+
+            elif plot_yield > 2.6:
+                habitat_directions = []
+                margin_directions = [] # Minimal margins for high yield, default no margin
+
+                if plot_id == 1: # Special case from hint, adjust margins based on hint for plot 1
+                    margin_directions = ["north-west", "north-east", "south-west", "south-east"]
+                    habitat_directions = ["north-west", "north-east", "south-west", "south-east"]
+                if plot_id == 5: # Special case from hint, adjust margins based on hint for plot 5
+                    margin_directions = ["north-east", "south-west", "south-east"]
+                if plot_id == 8: # Special case from hint, adjust margins based on hint for plot 8
+                    margin_directions = ["south-west"]
+
+
+            output_interventions.append({
+                "id": plot_id,
+                "type": plot_type,
+                "label": label,
+                "margin_directions": margin_directions,
+                "habitat_directions": habitat_directions
+            })
+
+    with open('output.json', 'w') as f:
+        json.dump(output_interventions, f, indent=2)
+
+    return output_interventions
+
+if __name__ == '__main__':
+    predicted_interventions = predict_interventions()
+    print(json.dumps(predicted_interventions, indent=2))
+``` 
+
+The current parameters like prices and costs are: These are the crop prices in USD/Tonne: {'Soybeans': 370, 'Oats': 95, 'Corn': 190, 'Canola/rapeseed': 1100, 'Barley': 120, 'Spring wheat': 200}, and these are the costs (implementation costs one time and in USD/ha, and maintenance costs in USD/ha/year) : {'margin': {'implementation': 400,  'maintenance': 60}, 'habitat': {'implementation': 300, 'maintenance': 70}, 'agriculture': {'maintenance': 100}}.
+
+One caveat is that the ecological connectivity heuristics are given in directions (margin_directions and habitat_directions), where there are 4 possible directions north-west, north-east, south-west, south-east. That means the resulting margin_intervention and habitat_conversion values can only be in multiples of 0.25 - 0.25, 0.5, 0.75, 1. You need to convert the directions to these values. You can ignore the directions after that, and assume that the farmer will use whichever direction you want them to. Your goal should be to communicate a message that gets the farmer to alter the margin_intervention and habitat_conversion values for each of the plots, from the former to the latter.  Your final message to the farmer should be in this format \communication{message}. 
+

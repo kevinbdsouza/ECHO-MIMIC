@@ -8,6 +8,8 @@ Collective action problems are classic examples of Ill-Structured Problems (ISPs
 
 The framework is demonstrated on agricultural landscape management, where local farming decisions impact global ecological connectivity, but the approach applies broadly to other collective action domains including decentralized resource management and policy design.
 
+![ECHO-MIMIC Framework Overview](data/intro_em.png)
+
 ## Key Features
 
 - **Four-Stage Optimization Pipeline**: 

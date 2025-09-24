@@ -1,8 +1,9 @@
 import google.generativeai as genai
-from rate_limiter import RateLimiter, send_message_with_retry
+from rate_limiter import send_message_with_retry
 import random
 import os
 import shutil
+from pathlib import Path
 import json
 import numpy as np
 import re
@@ -11,12 +12,21 @@ import pandas as pd
 from radon.raw import analyze
 from radon.complexity import cc_visit
 from radon.metrics import h_visit, mi_visit
-from tools import CommandOutputCapture
+from common import (
+    CommandOutputCapture,
+    build_model,
+    configure_genai,
+    ensure_rate_limiter,
+    extract_message,
+    extract_python_code,
+    fix_with_model,
+    validate_python_code,
+)
 from config import Config
-from dotenv import load_dotenv
 
 capture = CommandOutputCapture()
 cfg = Config()  # Initialize your config
+rate_limiter = ensure_rate_limiter(cfg)
 
 PV_FACTOR_20Y_5PC = 12.4622  # Present Value factor for an annuity of 20 years at 5%
 BUDGET_PER_FARM = 10000.0
@@ -77,26 +87,6 @@ FIX_MODEL_SYSTEM_INSTRUCTIONS = (
     "You are a helpful assistant who is an expert in graph and spatial optimization methods and python. "
     "Given the python code and the stack traceback, fix the errors and return the correct functioning python code."
 )
-
-
-# --- Helper Functions (some adapted from original) ---
-def extract_python_code(text):
-    pattern = r'```python(.*?)```'
-    match = re.search(pattern, text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    return text  # Return original text if no python block, as farmer might just explain
-
-
-def extract_message(text):
-    pattern = r"\\communication\{([^}]+)\}"
-    match = re.search(pattern, text)
-    if match:
-        return match.group(1)
-    # If no specific format, assume the whole response is the message (might need refinement)
-    # For now, let's be strict. If format is missing, LLM might not have followed instruction.
-    print("Warning: \\communication{} block not found in LLM response.")
-    return ""
 
 
 def get_modified_farm_system_instructions(personality_key):
@@ -188,103 +178,59 @@ def init_experimental_gemini_model(personality_key,
                                    policy_model_name="gemini-2.0-flash-thinking-exp-01-21",
                                    farm_model_name="gemini-2.0-flash-thinking-exp-01-21",
                                    fix_model_name="gemini-2.0-flash-thinking-exp-01-21"):
-    # Load environment variables
-    load_dotenv()
-    
-    # Get API key from environment variables
-    api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
-    if not api_key:
-        raise ValueError("No API key found. Please set GOOGLE_API_KEY or GEMINI_API_KEY in your .env file")
-    
-    genai.configure(api_key=api_key)
+    configure_genai()
 
-    policy_model = genai.GenerativeModel(
-        model_name=policy_model_name,
-        system_instruction=POLICY_SYSTEM_INSTRUCTIONS_BASE
+    policy_model = build_model(
+        policy_model_name,
+        POLICY_SYSTEM_INSTRUCTIONS_BASE,
+        ensure_configured=False,
     )
 
     farm_system_instructions = get_modified_farm_system_instructions(personality_key)
-    farm_model = genai.GenerativeModel(
-        model_name=farm_model_name,
-        system_instruction=farm_system_instructions
+    farm_model = build_model(
+        farm_model_name,
+        farm_system_instructions,
+        ensure_configured=False,
     )
 
-    fix_model = genai.GenerativeModel(
-        model_name=fix_model_name,
-        system_instruction=FIX_MODEL_SYSTEM_INSTRUCTIONS
+    fix_model = build_model(
+        fix_model_name,
+        FIX_MODEL_SYSTEM_INSTRUCTIONS,
+        ensure_configured=False,
     )
-    
-    # Initialize rate limiter
-    from config import Config
-    cfg = Config()
+
     global rate_limiter
-    rate_limiter = RateLimiter(**cfg.rate_limit)
-    
+    rate_limiter = ensure_rate_limiter(cfg)
+
     return policy_model, farm_model, fix_model
 
 
 def validate_response_exp(response_code, heur_dir, fix_model, input_json_path_src_for_sim):
-    temp_file = os.path.join(heur_dir, "temp_fix.py")
-    with open(temp_file, 'w') as f:
-        f.write(response_code)
+    heur_dir_path = Path(heur_dir)
+    input_source = Path(input_json_path_src_for_sim)
 
-    # Ensure input.geojson for the script run is a copy from the persistent source
-    input_dst = os.path.join(heur_dir, "input.geojson")
+    def _prepare(workdir_path: Path) -> None:
+        shutil.copyfile(input_source, workdir_path / "input.geojson")
 
-    original_cwd = os.getcwd()
-    os.chdir(heur_dir)  # Change dir for script execution if it expects files locally
+    def _fixer(code: str, trace: str) -> str:
+        return fix_with_model(
+            fix_model,
+            code,
+            trace,
+            rate_limiter=rate_limiter,
+            include_code_fence_hint=True,
+        )
 
-    code = 1
-    tries = 0
-    max_tries = 2  # Allow 2 fix attempts
-    current_code_to_run = response_code
-
-    while code != 0 and tries < max_tries:
-        shutil.copyfile(input_json_path_src_for_sim, input_dst)  # Reset input.geojson for each try
-        run_code, out, err = capture.run_python_script("temp_fix.py")  # Assumes temp_fix.py is now in heur_dir
-
-        if run_code != 0:
-            tries += 1
-            if tries < max_tries:
-                print(f"Attempt {tries} to fix code. Error:\n{err}")
-                try:
-                    fixed_code_attempt = fix_errors_exp(fix_model, current_code_to_run, err)
-                    current_code_to_run = extract_python_code(fixed_code_attempt)  # Ensure it's pure code
-                    with open(temp_file, 'w') as f:  # Write fixed code for next attempt
-                        f.write(current_code_to_run)
-                except Exception as e:
-                    print(f"Error during code fixing attempt: {e}")
-                    # Potentially break or just let it try again with old code if fix fails badly
-                    break  # Break if fixing itself fails
-            else:  # Max tries reached
-                print(f"Max fix attempts reached for temp_fix.py. Last error:\n{err}")
-        else:  # code == 0, success
-            code = 0  # Explicitly set success
-            break
-
-    os.chdir(original_cwd)  # Change back to original directory
-    if code != 0:  # If still not fixed
-        return None  # Indicate failure
-    return current_code_to_run  # Return the (potentially fixed) working code
-
-
-def fix_errors_exp(fix_model, heuristics_code, trace):
-    session = fix_model.start_chat(history=[])
-    prompt = f"""Given the following Python code:
-    ```python
-    {heuristics_code}
-    ```
-    And the following traceback:
-    {trace}
-    Fix the errors and return the correct functioning python code. Give the full code in a ```python ... ``` block.
-    """
-    try:
-        completion = send_message_with_retry(session, prompt, rate_limiter)
-        response = completion.parts[0].text
-        return response  # extract_python_code will be called by caller
-    except Exception as e:
-        print(f"Error in fix_errors_exp calling LLM: {e}")
-        return heuristics_code  # Return original code if LLM call fails
+    return validate_python_code(
+        response_code,
+        workdir=heur_dir_path,
+        capture=capture,
+        fixer=_fixer,
+        script_name="temp_fix.py",
+        max_attempts=2,
+        copy_template=False,
+        pre_run=_prepare,
+    )
 
 
 def evaluate_heuristics_exp(heuristic_policy_message, ground_truth_data, farm_model, fix_model,

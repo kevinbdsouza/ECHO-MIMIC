@@ -1,0 +1,147 @@
+Instructions: Your task is to come up with a message to the farmers in order to change their behaviour from following the ecological intensification heuristics that benefits solely their farm to following the ecological connectivity heuristics that increase landscape connectivity. Your communication to the farmer can be persuasive. It can provide incentives such as reducing the implementation or maintenance cost of an intervention by providing a one-time subsidy or yearly subsidies. It can compensate the farmers for yield that is lost to habitat conversion. It can communicate the benefits of landscape connectivity, and so on. 
+
+The ecological intensification heuristics the farmer is currently following are:
+ ```python
+import json
+
+def calculate_interventions_new_heuristic(input_geojson_file, output_geojson_file):
+    """
+    Calculates and assigns interventions (margin and habitat conversion) to agricultural plots
+    based on a new heuristic approach considering profitability.
+
+    This heuristic compares the potential revenue from an agricultural plot with the implementation costs
+    of margin and habitat interventions to decide on the most suitable intervention.
+    It considers a default crop (Soybeans) and its price, and the implementation costs for margin and habitat interventions.
+
+    Heuristic logic:
+    1. For each 'ag_plot', calculate the potential revenue: revenue = yield * soybean_price.
+    2. Compare revenue with margin and habitat intervention implementation costs.
+    3. If revenue > margin_implementation_cost and revenue > habitat_implementation_cost:
+       Choose the intervention with higher profit (revenue - cost). In practice, since habitat_cost < margin_cost, habitat will be chosen if revenue is high enough for both. Let's prioritize margin in this case for less disruptive intervention. So, choose margin.
+    4. If revenue > margin_implementation_cost and revenue <= habitat_implementation_cost: Choose margin intervention.
+    5. If revenue <= margin_implementation_cost and revenue > habitat_implementation_cost: Choose habitat intervention.
+    6. If revenue <= margin_implementation_cost and revenue <= habitat_implementation_cost: No intervention (set both to 0).
+    7. For non-'ag_plot' features, set both interventions to 0.
+
+    Args:
+        input_geojson_file (str): Path to the input GeoJSON file.
+        output_geojson_file (str): Path to the output GeoJSON file to save results.
+
+    Returns:
+        str: Path to the output GeoJSON file.
+    """
+
+    crop_prices = {'Soybeans': 370, 'Oats': 95, 'Corn': 190, 'Canola/rapeseed': 1100, 'Barley': 120, 'Spring wheat': 200}
+    intervention_costs = {
+        'margin': {'implementation': 400,  'maintenance': 60},
+        'habitat': {'implementation': 300, 'maintenance': 70},
+        'agriculture': {'maintenance': 100}
+    }
+    soybean_price = crop_prices['Soybeans']
+    margin_implementation_cost = intervention_costs['margin']['implementation']
+    habitat_implementation_cost = intervention_costs['habitat']['implementation']
+
+    with open(input_geojson_file, 'r') as f:
+        input_data = json.load(f)
+
+    output_features = []
+    for feature in input_data['features']:
+        props = feature['properties']
+        if props['type'] == 'ag_plot':
+            yield_value = props['yield']
+            revenue = yield_value * soybean_price
+
+            if revenue > margin_implementation_cost:
+                if revenue > habitat_implementation_cost:
+                    # Choose margin if both are profitable or equally profitable
+                    props['margin_intervention'] = 1.0
+                    props['habitat_conversion'] = 0.0
+                else:
+                    props['margin_intervention'] = 1.0
+                    props['habitat_conversion'] = 0.0
+            else:
+                if revenue > habitat_implementation_cost:
+                    props['margin_intervention'] = 0.0
+                    props['habitat_conversion'] = 1.0
+                else:
+                    props['margin_intervention'] = 0.0
+                    props['habitat_conversion'] = 0.0
+
+        else:
+            props['margin_intervention'] = 0.0
+            props['habitat_conversion'] = 0.0
+        output_features.append(feature)
+
+    output_geojson = {
+        "type": "FeatureCollection",
+        "features": output_features
+    }
+
+    with open(output_geojson_file, 'w') as f:
+        json.dump(output_geojson, f, indent=2)
+
+    return output_geojson_file
+
+# Use the function to process input.geojson and save to output.geojson
+input_file = 'input.geojson'
+output_file = 'output.geojson'
+output_filepath = calculate_interventions_new_heuristic(input_file, output_file)
+print(f"Output GeoJSON with interventions saved to: {output_filepath}")
+``` 
+The ecological connectivity heuristics that you should nudge them towards are:
+ ```python
+import json
+
+def predict_interventions(input_geojson_file):
+    with open(input_geojson_file, 'r') as f:
+        data = json.load(f)
+
+    output_interventions = []
+    for feature in data['features']:
+        plot_id = feature['properties']['id']
+        plot_type = feature['properties']['type']
+        label = feature['properties']['label']
+
+        if plot_type == 'hab_plots':
+            margin_directions = []
+            habitat_directions = ["north-west", "north-east", "south-west", "south-east"]
+        elif plot_type == 'ag_plot':
+            margin_directions = ["north-west", "north-east", "south-west", "south-east"]
+            habitat_directions = []
+
+            if label == "Spring wheat":
+                if plot_id == 2:
+                    margin_directions = ["north-west", "north-east", "south-west"]
+                    habitat_directions = ["north-east"]
+                # plot 8 spring wheat keeps full margin
+            elif label == "Oats":
+                margin_directions = ["north-west", "south-west", "south-east"]
+            # Canola/rapeseed keeps full margin
+
+        else:
+            margin_directions = []
+            habitat_directions = []  # Default case
+
+        output_interventions.append({
+            "plot_id": plot_id,
+            "plot_type": plot_type,
+            "label": label,
+            "margin_directions": margin_directions,
+            "habitat_directions": habitat_directions
+        })
+    return output_interventions
+
+input_file = 'input.geojson'
+output_file = 'output.json'
+predicted_interventions = predict_interventions(input_file)
+
+with open(output_file, 'w') as f:
+    json.dump(predicted_interventions, f, indent=2)
+
+print(f"Output saved to {output_file}")
+``` 
+
+The current parameters like prices and costs are: These are the crop prices in USD/Tonne: {'Soybeans': 370, 'Oats': 95, 'Corn': 190, 'Canola/rapeseed': 1100, 'Barley': 120, 'Spring wheat': 200}, and these are the costs (implementation costs one time and in USD/ha, and maintenance costs in USD/ha/year) : {'margin': {'implementation': 400,  'maintenance': 60}, 'habitat': {'implementation': 300, 'maintenance': 70}, 'agriculture': {'maintenance': 100}}.
+
+One caveat is that the ecological connectivity heuristics are given in directions (margin_directions and habitat_directions), where there are 4 possible directions north-west, north-east, south-west, south-east. That means the resulting margin_intervention and habitat_conversion values can only be in multiples of 0.25 - 0.25, 0.5, 0.75, 1. You need to convert the directions to these values. You can ignore the directions after that, and assume that the farmer will use whichever direction you want them to. Your goal should be to communicate a message that gets the farmer to alter the margin_intervention and habitat_conversion values for each of the plots, from the former to the latter.  Your final message to the farmer should be in this format \communication{message}. 
+

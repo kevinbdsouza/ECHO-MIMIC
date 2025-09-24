@@ -1,37 +1,41 @@
 import google.generativeai as genai
-from rate_limiter import RateLimiter, send_message_with_retry
-import random
+import json
 import math
+import os
+import random
+import shutil
+from pathlib import Path
+from typing import Optional, Callable
+
 from create_prompts import create_graph_prompt_file
+from config import Config
+import numpy as np
 from radon.raw import analyze
 from radon.complexity import cc_visit
 from radon.metrics import h_visit, mi_visit
 from tools import *
-from dotenv import load_dotenv
+from rate_limiter import send_message_with_retry
+from common import (
+    build_model,
+    configure_genai,
+    ensure_rate_limiter,
+    extract_python_code,
+    make_code_validator,
+)
+
+
+cfg = Config()
+rate_limiter = ensure_rate_limiter(cfg)
+capture = CommandOutputCapture()
 
 
 # ---------------------------
 # Utility Functions
 # ---------------------------
-def extract_python_code(text):
-    pattern = r'```python(.*?)```'
-    match = re.search(pattern, text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    else:
-        return "No Python code found."
-
 
 def init_gemini_model(heur_model_name="gemini-2.0-flash-thinking-exp-01-21", fix_model_name="gemini-2.0-flash-thinking-exp-01-21"):
-    # Load environment variables
-    load_dotenv()
-    
-    # Get API key from environment variables
-    api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
-    if not api_key:
-        raise ValueError("No API key found. Please set GOOGLE_API_KEY or GEMINI_API_KEY in your .env file")
-    
-    genai.configure(api_key=api_key)
+    configure_genai()
+
     system_instructions = ("You are a helpful assistant who is an expert in graph and spatial optimization methods "
                            "and who helps the user with optimization related queries. You will return final answers in python code. "
                            "You can't copy the directions (margin_directions and habitat_directions) given to produce the output, "
@@ -51,64 +55,49 @@ def init_gemini_model(heur_model_name="gemini-2.0-flash-thinking-exp-01-21", fix
     if halstead_metrics:
         system_instructions = system_instructions + halstead_instructions
 
-    heur_model = genai.GenerativeModel(
-        model_name=heur_model_name,
-        system_instruction=system_instructions
+    heur_model = build_model(
+        heur_model_name,
+        system_instructions,
+        ensure_configured=False,
     )
-    fix_model = genai.GenerativeModel(
-        model_name=fix_model_name,
-        system_instruction="You are a helpful assistant who is an expert in graph and spatial optimization methods and python. "
-                           "Given the python code and the stack traceback, fix the errors and return the correct functioning python code."
+    fix_model = build_model(
+        fix_model_name,
+        "You are a helpful assistant who is an expert in graph and spatial optimization methods and python. "
+        "Given the python code and the stack traceback, fix the errors and return the correct functioning python code.",
+        ensure_configured=False,
     )
-    # Initialize rate limiter
-    from config import Config
-    cfg = Config()
+
     global rate_limiter
-    rate_limiter = RateLimiter(**cfg.rate_limit)
-    
+    rate_limiter = ensure_rate_limiter(cfg)
+
     return heur_model, fix_model
 
 
+def _validate_code_with_retry(
+    code: str,
+    *,
+    script_name: str = "temp_fix.py",
+    max_attempts: int = 2,
+    pre_run: Optional[Callable[[Path], None]] = None,
+) -> str:
+    validator = make_code_validator(
+        workdir=Path(heur_dir),
+        capture=capture,
+        fix_model=fix_model,
+        rate_limiter=rate_limiter,
+        default_script=script_name,
+        default_attempts=max_attempts,
+    )
+    return validator(
+        code,
+        script_name=script_name,
+        max_attempts=max_attempts,
+        pre_run=pre_run,
+    )
+
+
 def validate_response(response):
-    temp_file = os.path.join(heur_dir, "temp_fix.py")
-    with open(temp_file, 'w') as f:
-        f.write(response)
-
-    input_src = os.path.join(heur_dir, "input_cp.geojson")
-    input_dst = os.path.join(heur_dir, "input.geojson")
-
-    os.chdir(heur_dir)
-    code = 1
-    tries = 0
-    while code and tries <= 1:
-        shutil.copyfile(input_src, input_dst)
-        code, out, err = capture.run_python_script("temp_fix.py")
-        if code:
-            try:
-                response = fix_errors(fix_model, response, err)
-                tries += 1
-            except Exception as e:
-                print(e)
-    os.chdir(cfg.src_dir)
-    return response
-
-
-def fix_errors(fix_model, heuristics_code, trace):
-    session = fix_model.start_chat(history=[])
-    prompt = f"""Given the following Python code:
-
-    ```python
-    {heuristics_code}
-    ```
-    And the following traceback: 
-    {trace}
-    Fix the errors and return the correct functioning python code. Give the full code. 
-    """
-
-    completion = send_message_with_retry(session, prompt, rate_limiter)
-    response = completion.parts[0].text
-    python_code = extract_python_code(response)
-    return python_code
+    return _validate_code_with_retry(response)
 
 # ---------------------------
 # Candidate Population Functions
@@ -470,8 +459,6 @@ def create_init_population(init_model, fix_model):
     prompt_path = os.path.join(conn_dir, "prompt_input.txt")
     for i in range(1, population_size + 1):
         heur_file = os.path.join(heur_dir, "heuristics_gem_" + str(i) + ".py")
-        input_src = os.path.join(heur_dir, "input_cp.geojson")
-        input_dst = os.path.join(heur_dir, "input.geojson")
         try:
             run_gemini_flashexp(prompt_path, heur_file, init_model)
         except Exception as e:
@@ -479,21 +466,13 @@ def create_init_population(init_model, fix_model):
             continue
         with open(heur_file, 'r') as f:
             heuristics_code = f.read()
-        os.chdir(heur_dir)
-        code = 1
-        tries = 0
-        while code and tries <= 2:
-            shutil.copyfile(input_src, input_dst)
-            code, out, err = capture.run_python_script("heuristics_gem_" + str(i) + ".py")
-            if code:
-                try:
-                    heuristics_code = fix_errors(fix_model, heuristics_code, err)
-                    tries += 1
-                except Exception as e:
-                    print(e)
+        heuristics_code = _validate_code_with_retry(
+            heuristics_code,
+            script_name=f"heuristics_gem_{i}.py",
+            max_attempts=3,
+        )
         with open(heur_file, 'w') as f:
             f.write(heuristics_code)
-        os.chdir(cfg.src_dir)
 
 # ---------------------------
 # Radon Metrics Computation (candidate version)
@@ -845,7 +824,7 @@ if __name__ == "__main__":
     halstead_instructions = ("Generate python code with high halstead metrics like h1, h2, N1, N2, volume, "
                              "difficulty, length, effort, and vocabulary.\n\n")
 
-    farm_dir = os.path.join(cfg.data_dir, "crop_inventory", "syn_farms")
+    farm_dir = cfg.data_dir
     all_farms_geojson_path = os.path.join(farm_dir, "farms_cp.geojson")
 
     farm_ids = [3]

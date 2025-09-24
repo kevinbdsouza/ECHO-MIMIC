@@ -1,15 +1,33 @@
 import google.generativeai as genai
-from rate_limiter import RateLimiter, send_message_with_retry
+import json
+import os
 import random
+import shutil
+from pathlib import Path
 from tools import *
 import math
+from typing import Optional
 from create_prompts import create_nudge_prompt_file
 import pandas as pd
 from radon.raw import analyze
 from radon.complexity import cc_visit
 from radon.metrics import h_visit, mi_visit
 from config import Config
-from dotenv import load_dotenv
+import numpy as np
+from rate_limiter import send_message_with_retry
+from common import (
+    build_model,
+    configure_genai,
+    ensure_rate_limiter,
+    extract_message,
+    extract_python_code,
+    make_code_validator,
+)
+
+
+cfg = Config()
+rate_limiter = ensure_rate_limiter(cfg)
+capture = CommandOutputCapture()
 
 
 def get_init_population():
@@ -23,34 +41,10 @@ def get_init_population():
     return init_population
 
 
-def extract_python_code(text):
-    pattern = r'```python(.*?)```'
-    match = re.search(pattern, text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    else:
-        return "No Python code found."
-
-
-def extract_message(text):
-    pattern = r"\\communication\{([^}]+)\}"
-    match = re.search(pattern, text)
-    if match:
-        return match.group(1)
-    return ""
-
-
 def init_gemini_model(policy_model_name="gemini-2.0-flash-thinking-exp-01-21", farm_model_name="gemini-2.0-flash-thinking-exp-01-21",
                       fix_model_name="gemini-2.0-flash-thinking-exp-01-21"):
-    # Load environment variables
-    load_dotenv()
-    
-    # Get API key from environment variables
-    api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
-    if not api_key:
-        raise ValueError("No API key found. Please set GOOGLE_API_KEY or GEMINI_API_KEY in your .env file")
-    
-    genai.configure(api_key=api_key)
+    configure_genai()
+
     policy_system_instructions = ("You are an expert in land use policy, communication, incentives, and economics. "
                                   "Your task is to come up with the best message to be communicated to the farmers "
                                   "so as to change their behaviour from one set of heuristics to another set of heuristics. "
@@ -64,50 +58,54 @@ def init_gemini_model(policy_model_name="gemini-2.0-flash-thinking-exp-01-21", f
                                 "and what the message is. Don't invent new variable names in the output, keep "
                                 "using margin_intervention and habitat_conversion. \n\n")
 
-    policy_model = genai.GenerativeModel(
-        model_name=policy_model_name,
-        # gemini-2.0-flash-thinking-exp-01-21, gemini-2.0-flash-exp, gemini-exp-1206, gemini-1.5-pro, gemini-1.5-flash
-        system_instruction=policy_system_instructions
+    policy_model = build_model(
+        policy_model_name,
+        policy_system_instructions,
+        ensure_configured=False,
     )
-    farm_model = genai.GenerativeModel(
-        model_name=farm_model_name,
-        system_instruction=farm_system_instructions
+    farm_model = build_model(
+        farm_model_name,
+        farm_system_instructions,
+        ensure_configured=False,
     )
-    fix_model = genai.GenerativeModel(
-        model_name=fix_model_name,
-        system_instruction="You are a helpful assistant who is an expert in graph and spatial optimization methods and python. "
-                           "Given the python code and the stack traceback, fix the errors and return the correct functioning python code."
+    fix_model = build_model(
+        fix_model_name,
+        "You are a helpful assistant who is an expert in graph and spatial optimization methods and python. "
+        "Given the python code and the stack traceback, fix the errors and return the correct functioning python code.",
+        ensure_configured=False,
     )
-    # Initialize rate limiter
-    from config import Config
-    cfg = Config()
+
     global rate_limiter
-    rate_limiter = RateLimiter(**cfg.rate_limit)
-    
+    rate_limiter = ensure_rate_limiter(cfg)
+
     return policy_model, farm_model, fix_model
 
 
+def _validate_code_with_retry(
+    code: str,
+    *,
+    script_name: str = "temp_fix.py",
+    max_attempts: int = 2,
+    pre_run: Optional[Callable[[Path], None]] = None,
+) -> str:
+    validator = make_code_validator(
+        workdir=Path(heur_dir),
+        capture=capture,
+        fix_model=fix_model,
+        rate_limiter=rate_limiter,
+        default_script=script_name,
+        default_attempts=max_attempts,
+    )
+    return validator(
+        code,
+        script_name=script_name,
+        max_attempts=max_attempts,
+        pre_run=pre_run,
+    )
+
+
 def validate_response(response):
-    temp_file = os.path.join(heur_dir, "temp_fix.py")
-    with open(temp_file, 'w') as f:
-        f.write(response)
-
-    input_src = os.path.join(heur_dir, "input_cp.geojson")
-    input_dst = os.path.join(heur_dir, "input.geojson")
-
-    os.chdir(heur_dir)
-    code = 1
-    tries = 0
-    while code and tries <= 1:
-        shutil.copyfile(input_src, input_dst)
-        code, out, err = capture.run_python_script("temp_fix.py")
-        if code:
-            try:
-                response = fix_errors(fix_model, response, err)
-                tries += 1
-            except Exception as e:
-                print(e)
-    return response
+    return _validate_code_with_retry(response)
 
 
 def evaluate_heuristics(heuristic_policy, ground_truth, mode="temp"):
@@ -183,28 +181,6 @@ def evaluate_heuristics(heuristic_policy, ground_truth, mode="temp"):
         return 1 / total_error, heuristic_policy, heuristics_code
     except Exception as e:
         return 0, heuristic_policy, heuristics_code
-
-
-def fix_errors(fix_model, heuristics_code, trace):
-    session = fix_model.start_chat(
-        history=[
-        ]
-    )
-
-    prompt = f"""Given the following Python code:
-
-    ```python
-    {heuristics_code}
-    ```
-    And the following traceback: 
-    {trace}
-    Fix the errors and return the correct functioning python code. Give the full code. 
-    """
-
-    completion = send_message_with_retry(session, prompt, rate_limiter)
-    response = completion.parts[0].text
-    python_code = extract_python_code(response)
-    return python_code
 
 
 def mutate_heuristics(heuristic_policy):
@@ -668,7 +644,7 @@ if __name__ == "__main__":
     )
 
     #farms_dir = os.path.join(cfg.data_dir, "crop_inventory", "syn_farms")
-    farms_dir = os.path.join(cfg.disk_dir, "syn_farms")
+    farms_dir = cfg.data_dir
 
     farm_ids = [3]
     for farm_id in farm_ids:

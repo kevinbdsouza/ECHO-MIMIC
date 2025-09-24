@@ -4,6 +4,8 @@ paper/
 plot/
 venv/
 bck/
+data_bck/
+old/
 
 .DS_Store
 .idea/
