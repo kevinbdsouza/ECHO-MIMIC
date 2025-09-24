@@ -1,7 +1,7 @@
 import google.generativeai as genai
 from rate_limiter import RateLimiter, send_message_with_retry
 import random
-from utils.tools import *
+from tools import *
 import math
 from create_prompts import create_nudge_prompt_file
 import pandas as pd

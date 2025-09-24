@@ -11,7 +11,7 @@ import pandas as pd
 from radon.raw import analyze
 from radon.complexity import cc_visit
 from radon.metrics import h_visit, mi_visit
-from utils.tools import CommandOutputCapture
+from tools import CommandOutputCapture
 from config import Config
 from dotenv import load_dotenv
 

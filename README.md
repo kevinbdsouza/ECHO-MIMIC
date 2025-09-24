@@ -52,10 +52,6 @@ echo_mimic/
 - **`dspy_baseline_global.py`**: **Stage 3** DSPy baseline for global connectivity optimization
 - **`dspy_baseline_nudge.py`**: **Stage 4** DSPy baseline for nudging/behavioral messaging
 
-### 3. Analysis and Visualization
-- **`farm_es_analysis.py`**: Farm evolution analysis
-- **`nudge_es_analysis.py`**: Nudging strategy analysis
-
 ## Installation
 
 ### Prerequisites
@@ -68,7 +64,7 @@ echo_mimic/
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd echo_mimic
+   cd ECHO-MIMIC
    ```
 
 2. **Create and activate a Python virtual environment**:
@@ -87,14 +83,7 @@ echo_mimic/
    ```bash
    GOOGLE_API_KEY=your_gemini_api_key_here
    ```
-
-5. **Configure paths**:
-   Edit `config.py` to update paths according to your system:
-   ```python
-   self.src_dir = "/path/to/your/project"
-   self.data_dir = "/path/to/your/data"
-   ```
-
+   
 ## Usage
 
 ### ECHO-MIMIC Framework Experiments

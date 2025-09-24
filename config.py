@@ -5,10 +5,10 @@ import numpy as np
 class Config:
     def __init__(self):
         #cwd = os.getcwd()
-        self.src_dir = "/Users/kevindsouza/Documents/Obsidian_Vault/Work/RBC/code/concordia/agri_abm"
+        self.src_dir = os.getcwd()
         self.data_dir = os.path.join(self.src_dir, "data")
         self.plot_dir = os.path.join(self.src_dir, "plots")
-        self.disk_dir = "/Volumes/Kevins Disk/work/postdoc/RBC/data/agri_abm_data/data/crop_inventory"
+        self.disk_dir = ""
 
         # DSPy configuration values
         self.farms_dir = os.path.join(self.disk_dir, "syn_farms")
