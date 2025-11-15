@@ -1,0 +1,30 @@
+ECHO Stage 2 (Imitation) — Carbon-aware EV charging
+===================================================
+
+You must infer a compact Python policy that imitates each household's baseline choice.
+Baseline objective: minimize personal bill + comfort penalty.
+For agent i choosing slot t:
+    cost_i(t) = price[t] + comfort_penalty_i if t ∉ preferred_i else price[t]
+
+Provided context
+---------------
+Scenario id: {scenario_id}
+Slots: {slots}
+Tariffs: {price}
+Comfort penalties encoded per agent. Preferred slot indices are shown below.
+Neighbor exemplars demonstrate historical local decisions.
+
+Agent sheets
+------------
+{agents}
+
+Output specification
+--------------------
+Write a Python script that:
+1. Loads scenario.json from disk.
+2. Computes each agent's selected slot following your inferred heuristic.
+3. Writes a JSON file named local_policy_output.json with a list of slot indices in agent order.
+
+Scoring
+-------
+Fitness = imitation accuracy across five agents (exact match with local optimum set).

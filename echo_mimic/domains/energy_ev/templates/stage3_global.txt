@@ -1,0 +1,34 @@
+ECHO Stage 3 (Collective) — Carbon-aware EV charging
+====================================================
+
+Goal: craft executable heuristics that coordinate five households to minimize the
+weighted transformer overload and carbon term.
+
+Global objective
+----------------
+For joint allocation a (length 5):
+    feeder_penalty = max_t max(0, baseline[t] + EV_count[t] − capacity)
+    carbon_term = sum_t carbon_intensity[t] for every EV assigned to slot t
+    score(a) = α * feeder_penalty + β * carbon_term
+
+Parameters
+----------
+Scenario id: {scenario_id}
+Slots (index → hour): {slots}
+Feeder capacity: {capacity}
+Baseline load: {baseline}
+Carbon intensity: {carbon}
+Weights: α={alpha}, β={beta}
+
+Agent context
+-------------
+{agents}
+
+Output specification
+--------------------
+Write Python that loads scenario.json, simulates your heuristic, and writes
+`global_policy_output.json` containing the chosen slot for each agent.
+
+Scoring
+-------
+Fitness = −score(a). Lower global cost is better, with hard preference for staying below capacity.
