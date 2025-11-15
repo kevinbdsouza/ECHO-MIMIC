@@ -6,6 +6,7 @@ venv/
 bck/
 data_bck/
 old/
+__pycache__/
 
 .DS_Store
 .idea/
