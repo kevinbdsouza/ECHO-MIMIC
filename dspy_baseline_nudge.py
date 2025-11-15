@@ -18,9 +18,9 @@ from dotenv import load_dotenv
 
 import dspy
 from dspy.teleprompt import MIPROv2, BootstrapFewShot
-from dspy_rate_limiter import configure_dspy_with_rate_limiting
+from echo_mimic.dspy_rate_limiter import configure_dspy_with_rate_limiting
 
-from config import Config
+from echo_mimic.config import Config
 
 
 # --------------------------

@@ -9,8 +9,8 @@ from typing import Iterable, Optional, Tuple
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-from config import Config
-from rate_limiter import RateLimiter
+from ..config import Config
+from ..rate_limiter import RateLimiter
 
 _DEFAULT_ENV_KEYS = ("GOOGLE_API_KEY", "GEMINI_API_KEY")
 _API_KEY: Optional[str] = None

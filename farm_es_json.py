@@ -1,11 +1,11 @@
 import google.generativeai as genai
-from rate_limiter import RateLimiter, send_message_with_retry
+from echo_mimic.rate_limiter import RateLimiter, send_message_with_retry
 import random
 # Removed: import ast - No longer evaluating Python code strings
-from tools import *
+from echo_mimic.tools import *
 import math
 from concurrent.futures import ThreadPoolExecutor
-from create_prompts import create_farm_prompt_file_2
+from echo_mimic.prompts import create_farm_prompt_file_2
 import pandas as pd
 import matplotlib.pyplot as plt
 from dotenv import load_dotenv
@@ -99,7 +99,7 @@ def init_gemini_model(heur_model_name="gemini-1.5-flash-latest", fix_model_name=
         system_instruction=fix_system_instructions
     )
     # Initialize rate limiter
-    from config import Config
+    from echo_mimic.config import Config
     cfg = Config()
     global rate_limiter
     rate_limiter = RateLimiter(**cfg.rate_limit)

@@ -1,21 +1,20 @@
+import argparse
+from typing import List, Optional
 import google.generativeai as genai
 import json
 import os
 import random
 import shutil
 from pathlib import Path
-from tools import *
+from echo_mimic.tools import *
 import math
-from typing import Optional
-from create_prompts import create_nudge_prompt_file
+from echo_mimic.prompts import create_nudge_prompt_file
 import pandas as pd
-from radon.raw import analyze
-from radon.complexity import cc_visit
-from radon.metrics import h_visit, mi_visit
-from config import Config
+from echo_mimic.metrics import compute_radon_metrics
+from echo_mimic.config import Config
 import numpy as np
-from rate_limiter import send_message_with_retry
-from common import (
+from echo_mimic.rate_limiter import send_message_with_retry
+from echo_mimic.common import (
     build_model,
     configure_genai,
     ensure_rate_limiter,
@@ -403,117 +402,6 @@ def create_init_population(policy_model):
             continue
 
 
-def compute_radon_metrics(old_df, python_codes, fitness_scores):
-    new_rows = []
-
-    for code, score in zip(python_codes, fitness_scores):
-        # 1) Raw metrics
-        try:
-            raw_metrics = analyze(code)
-        except Exception as e:
-            continue
-
-        # raw_metrics has:
-        #   loc -> total number of lines
-        #   lloc -> logical lines of code
-        #   sloc -> source lines of code
-        #   comment -> number of comment lines
-        #   multi -> number of multi-line strings
-        #   blank -> number of blank lines
-
-        # 2) Cyclomatic complexity
-        try:
-            complexities = cc_visit(code)
-        except Exception as e:
-            complexities = 0
-
-        # complexities is a list of FunctionInfo / ClassInfo (or empty if no defs).
-        # Each entry has a .complexity attribute (among others).
-        if complexities:
-            avg_cyclomatic_complexity = sum(c.complexity for c in complexities) / len(complexities)
-        else:
-            avg_cyclomatic_complexity = 0.0
-
-        # 3) Halstead metrics
-        # h_visit returns a list of Halstead objects for each function/class definition.
-        # Each Halstead object has:
-        #   h1 (distinct operators), h2 (distinct operands)
-        #   N1 (total operators), N2 (total operands)
-        #   vocabulary, length, calculated_length, volume, difficulty,
-        #   effort, time, bugs
-        try:
-            halstead_results = h_visit(code)
-        except Exception as e:
-            halstead_results = []
-
-        # We can aggregate Halstead results across all functions/classes.
-        # For example, let's take an average for each property:
-        if len(halstead_results) > 0:
-            total_h1 = halstead_results.total.h1
-            total_h2 = halstead_results.total.h2
-            total_N1 = halstead_results.total.N1
-            total_N2 = halstead_results.total.N2
-            total_vocabulary = halstead_results.total.vocabulary
-            total_length = halstead_results.total.length
-            total_volume = halstead_results.total.volume
-            total_difficulty = halstead_results.total.difficulty
-            total_effort = halstead_results.total.effort
-            total_time = halstead_results.total.time
-            total_bugs = halstead_results.total.bugs
-        else:
-            # If there are no functions/classes, fill with 0 or None
-            total_h1 = total_h2 = total_N1 = total_N2 = 0
-            total_vocabulary = total_length = total_volume = 0
-            total_difficulty = total_effort = total_time = total_bugs = 0
-
-        # 4) Maintainability Index
-        # mi_approx(code, multi=True, comments=True) returns a single MI float.
-        # Typically, you can experiment with toggling multi/comments if needed.
-        try:
-            mi_value = mi_visit(code, multi=True)
-        except Exception as e:
-            mi_value = 0
-
-        # Create a row dict
-        row = {
-            'fitness_score': score,
-
-            # Raw metrics
-            'loc': raw_metrics.loc,
-            'lloc': raw_metrics.lloc,
-            'sloc': raw_metrics.sloc,
-            'comment': raw_metrics.comments,
-            'multi': raw_metrics.multi,
-            'blank': raw_metrics.blank,
-
-            # Cyclomatic complexity
-            'avg_cyclomatic_complexity': avg_cyclomatic_complexity,
-
-            # Maintainability Index
-            'maintainability_index': mi_value,
-
-            # Halstead average metrics
-            'halstead_h1': total_h1,
-            'halstead_h2': total_h2,
-            'halstead_N1': total_N1,
-            'halstead_N2': total_N2,
-            'halstead_vocabulary': total_vocabulary,
-            'halstead_length': total_length,
-            'halstead_volume': total_volume,
-            'halstead_difficulty': total_difficulty,
-            'halstead_effort': total_effort,
-            'halstead_time': total_time,
-            'halstead_bugs': total_bugs,
-        }
-        new_rows.append(row)
-
-    # Create a DataFrame from these new rows
-    new_df = pd.DataFrame(new_rows)
-
-    # Concatenate with the existing old_df
-    metrics_df = pd.concat([old_df, new_df], ignore_index=True)
-    return metrics_df
-
 
 def run_evo_strat(population):
     scores, population, codes = evaluate_population(population, ground_truth)
@@ -615,19 +503,35 @@ def run_evo_strat(population):
             break
 
 
-if __name__ == "__main__":
+
+
+def run(
+    *,
+    population_size_value: int = 25,
+    num_generations_value: int = 10,
+    inner_loop_size_value: int = 10,
+    farm_ids: Optional[List[int]] = None,
+    init_value: bool = True,
+) -> None:
+    """Execute the nudge evolutionary strategy workflow with configurable parameters."""
+
+    global cfg, capture, population_size, num_generations, inner_loop_size, init
+    global params_instructions, policy_task_instructions
+    global farm_dir, conn_dir, nudge_dir, heur_dir, gen_dir
+    global score_file, metrics_file, input_json, ground_truth, hybrid_output, eco_intens_output
+
     cfg = Config()
     capture = CommandOutputCapture()
-    population_size = 25
-    num_generations = 10
-    inner_loop_size = 10
-    init = True
+    population_size = population_size_value
+    num_generations = num_generations_value
+    inner_loop_size = inner_loop_size_value
+    init = init_value
 
     params_instructions = (
         "These are the crop prices in USD/Tonne: {'Soybeans': 370, 'Oats': 95, 'Corn': 190, 'Canola/rapeseed': 1100, "
         "'Barley': 120, 'Spring wheat': 200}, and these are the costs (implementation costs one time and in USD/ha, and "
         "maintenance costs in USD/ha/year) : {'margin': {'implementation': 400,  'maintenance': 60}, 'habitat': {"
-        "'implementation': 300, 'maintenance': 70}, 'agriculture': {'maintenance': 100}}.\n\n"
+        "'implementation': 300, 'maintenance': 70}, 'agriculture': {'maintenance': 100}}. \n\n"
     )
 
     policy_task_instructions = (
@@ -640,17 +544,15 @@ if __name__ == "__main__":
         "landscape connectivity, and so on. \n\n"
         "Your goal should be to communicate a message that gets them to alter the margin_intervention and "
         "habitat_conversion values for each of the plots, from the former to the latter. "
-        "Your final message to the farmer should be in this format \communication{message}. \n\n"
+        "Your final message to the farmer should be in this format \\communication{message}. \n\n"
     )
 
-    #farms_dir = os.path.join(cfg.data_dir, "crop_inventory", "syn_farms")
     farms_dir = cfg.data_dir
+    target_farm_ids = farm_ids or [3]
 
-    farm_ids = [3]
-    for farm_id in farm_ids:
-
-        print(f"Running farm:{farm_id}")
-        farm_dir = os.path.join(farms_dir, f"farm_{farm_id}")
+    for farm_identifier in target_farm_ids:
+        print(f"Running farm:{farm_identifier}")
+        farm_dir = os.path.join(farms_dir, f"farm_{farm_identifier}")
         conn_dir = os.path.join(farm_dir, "connectivity", "run_1")
         nudge_dir = os.path.join(farm_dir, "nudge")
 
@@ -698,20 +600,48 @@ if __name__ == "__main__":
         score_file = os.path.join(heur_dir, "scores_es.txt")
         metrics_file = os.path.join(heur_dir, "metrics_es.csv")
 
-        # Load the ground truth and output JSON files
-        with open(os.path.join(conn_dir, 'output_gt_directions.json')) as f:
+        with open(os.path.join(conn_dir, 'output_hybrid_heu.py')) as f:
+            hybrid_heuristics = f.read()
+
+        with open(os.path.join(conn_dir, 'output_gt.geojson')) as f:
             ground_truth = json.load(f)
 
-        # Extract model name from config
-        config_model = cfg.lm.split('/')[-1] if '/' in cfg.lm else cfg.lm
-        policy_model, farm_model, fix_model = init_gemini_model(policy_model_name=config_model,
-                                                                farm_model_name=config_model,
-                                                                fix_model_name=config_model)
+        with open(os.path.join(conn_dir, 'output_hybrid.geojson')) as f:
+            hybrid_output = json.load(f)
+
+        with open(os.path.join(conn_dir, 'output_eco_intens.geojson')) as f:
+            eco_intens_output = json.load(f)
+
+        policy_model, fix_model = init_gemini_model()
         if init:
-            create_nudge_prompt_file(nudge_dir)
             create_init_population(policy_model)
 
-        init_population = get_init_population()
-        run_evo_strat(init_population)
+        with open(os.path.join(heur_dir, "prompt_input.txt"), "r") as f:
+            farm_prompt = f.read()
+
+        best_policy_file = os.path.join(gen_dir, "best_policy_gem_gen_0.txt")
+        with open(best_policy_file, 'w') as f:
+            f.write(farm_prompt)
+
+        population = get_init_population()
+        run_evo_strat(population)
 
         print("done")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run the nudge evolutionary strategy workflow.")
+    parser.add_argument("--population-size", type=int, default=25, help="Population size for the evolutionary loop.")
+    parser.add_argument("--num-generations", type=int, default=10, help="Number of generations to evolve.")
+    parser.add_argument("--inner-loop-size", type=int, default=10, help="Number of offspring attempts per generation.")
+    parser.add_argument("--farm-ids", type=int, nargs="+", default=[3], help="Target farm IDs to process.")
+    parser.add_argument("--no-init", action="store_true", help="Skip regenerating the initial population with Gemini.")
+
+    args = parser.parse_args()
+
+    run(
+        population_size_value=args.population_size,
+        num_generations_value=args.num_generations,
+        inner_loop_size_value=args.inner_loop_size,
+        farm_ids=args.farm_ids,
+        init_value=not args.no_init,
+    )

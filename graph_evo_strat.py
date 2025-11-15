@@ -1,3 +1,4 @@
+import argparse
 import google.generativeai as genai
 import json
 import math
@@ -5,22 +6,31 @@ import os
 import random
 import shutil
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional, Callable, List
 
-from create_prompts import create_graph_prompt_file
-from config import Config
+from echo_mimic.prompts import create_graph_prompt_file
+from echo_mimic.config import Config
 import numpy as np
-from radon.raw import analyze
-from radon.complexity import cc_visit
-from radon.metrics import h_visit, mi_visit
-from tools import *
-from rate_limiter import send_message_with_retry
-from common import (
+from echo_mimic.metrics import compute_radon_metrics_from_population as compute_radon_metrics
+from echo_mimic.tools import *
+from echo_mimic.rate_limiter import send_message_with_retry
+from echo_mimic.common import (
     build_model,
     configure_genai,
     ensure_rate_limiter,
     extract_python_code,
     make_code_validator,
+)
+from echo_mimic.common.operators import (
+    make_operator_counts,
+    make_operator_deltas,
+    plot_best_trajectory_across_generations,
+    plot_population_operator_stats,
+)
+from echo_mimic.prompts.instructions import (
+    GRAPH_COMMON_TASK_INSTRUCTIONS,
+    GRAPH_HALSTEAD_INSTRUCTIONS,
+    GRAPH_PARAMS_INSTRUCTIONS,
 )
 
 
@@ -104,7 +114,6 @@ def validate_response(response):
 # ---------------------------
 def get_init_population():
     init_population = []
-    operator_list = ["init", "mutate", "crossover", "evolve_1", "evolve_2", "reflect"]
     for i in range(1, population_size + 1):
         heuristic_file = os.path.join(heur_dir, "heuristics_gem_" + str(i) + ".py")
         with open(heuristic_file, 'r') as f:
@@ -112,8 +121,8 @@ def get_init_population():
         candidate = {
             "code": heuristics_code,
             "trajectory": ["init(0.0000)"],
-            "counts": {op: 0 for op in operator_list},
-            "fitness_deltas": {op: 0.0 for op in operator_list},
+            "counts": make_operator_counts(),
+            "fitness_deltas": make_operator_deltas(),
             "score": 0.0
         }
         candidate["counts"]["init"] = 1
@@ -474,180 +483,6 @@ def create_init_population(init_model, fix_model):
         with open(heur_file, 'w') as f:
             f.write(heuristics_code)
 
-# ---------------------------
-# Radon Metrics Computation (candidate version)
-# ---------------------------
-def compute_radon_metrics(old_df, population):
-    new_rows = []
-    for candidate in population:
-        code = candidate["code"]
-        score = candidate["score"]
-        try:
-            raw_metrics = analyze(code)
-        except Exception as e:
-            continue
-        try:
-            complexities = cc_visit(code)
-        except Exception as e:
-            complexities = 0
-        if complexities:
-            avg_cyclomatic_complexity = sum(c.complexity for c in complexities) / len(complexities)
-        else:
-            avg_cyclomatic_complexity = 0.0
-        try:
-            halstead_results = h_visit(code)
-        except Exception as e:
-            halstead_results = []
-        if len(halstead_results) > 0:
-            total_h1 = halstead_results.total.h1
-            total_h2 = halstead_results.total.h2
-            total_N1 = halstead_results.total.N1
-            total_N2 = halstead_results.total.N2
-            total_vocabulary = halstead_results.total.vocabulary
-            total_length = halstead_results.total.length
-            total_volume = halstead_results.total.volume
-            total_difficulty = halstead_results.total.difficulty
-            total_effort = halstead_results.total.effort
-            total_time = halstead_results.total.time
-            total_bugs = halstead_results.total.bugs
-        else:
-            total_h1 = total_h2 = total_N1 = total_N2 = 0
-            total_vocabulary = total_length = total_volume = 0
-            total_difficulty = total_effort = total_time = total_bugs = 0
-        try:
-            mi_value = mi_visit(code, multi=True)
-        except Exception as e:
-            mi_value = 0
-        row = {
-            'fitness_score': score,
-            'loc': raw_metrics.loc,
-            'lloc': raw_metrics.lloc,
-            'sloc': raw_metrics.sloc,
-            'comment': raw_metrics.comments,
-            'multi': raw_metrics.multi,
-            'blank': raw_metrics.blank,
-            'avg_cyclomatic_complexity': avg_cyclomatic_complexity,
-            'maintainability_index': mi_value,
-            'halstead_h1': total_h1,
-            'halstead_h2': total_h2,
-            'halstead_N1': total_N1,
-            'halstead_N2': total_N2,
-            'halstead_vocabulary': total_vocabulary,
-            'halstead_length': total_length,
-            'halstead_volume': total_volume,
-            'halstead_difficulty': total_difficulty,
-            'halstead_effort': total_effort,
-            'halstead_time': total_time,
-            'halstead_bugs': total_bugs,
-        }
-        new_rows.append(row)
-    new_df = pd.DataFrame(new_rows)
-    metrics_df = pd.concat([old_df, new_df], ignore_index=True)
-    return metrics_df
-
-# ---------------------------
-# Plotting and CSV Saving Functions (from code2)
-# ---------------------------
-def plot_best_trajectory_across_generations(best_history, gen_dir):
-    base_op_list = ["init", "mutate", "crossover", "evolve_1", "evolve_2", "reflect"]
-    operator_map = {op: i for i, op in enumerate(base_op_list)}
-    for entry in best_history:
-        gen = entry["generation"]
-        score = entry["score"]
-        trajectory_list = entry["trajectory"]
-        counts_dict = entry["counts"]
-        fitness_deltas_dict = entry["fitness_deltas"]
-
-        ops = []
-        deltas = []
-        for t in trajectory_list:
-            idx = t.find("(")
-            if idx == -1:
-                op_name = t
-                delta_str = "0.0"
-            else:
-                op_name = t[:idx].strip()
-                inside = t[idx:].strip("()")
-                delta_str = inside
-            try:
-                delta_val = float(delta_str)
-            except:
-                delta_val = 0.0
-            ops.append(op_name)
-            deltas.append(delta_val)
-        x_vals = list(range(len(ops)))
-        y_op = [operator_map.get(op, -1) for op in ops]
-        plt.figure()
-        plt.plot(x_vals, y_op, marker='o')
-        plt.title(f"Best Candidate Trajectory (Gen {gen})\nScore={score:.4f}")
-        plt.xlabel("Trajectory Step")
-        plt.ylabel("Operators")
-        plt.yticks(list(range(len(base_op_list))), base_op_list)
-        for i, (x, y) in enumerate(zip(x_vals, y_op)):
-            plt.text(x, y, f"{deltas[i]:+.3f}", fontsize=9, ha='left', va='bottom')
-        outname = os.path.join(gen_dir, f"best_trajectory_gen_{gen}.png")
-        plt.tight_layout()
-        plt.savefig(outname)
-        plt.close()
-
-        plt.figure()
-        op_names = list(counts_dict.keys())
-        usage_vals = [counts_dict[op] for op in op_names]
-        plt.bar(op_names, usage_vals)
-        plt.title(f"Operator Usage Counts - Gen {gen}, Score={score:.4f}")
-        plt.xlabel("Operator")
-        plt.ylabel("Count")
-        outname = os.path.join(gen_dir, f"best_counts_gen_{gen}.png")
-        plt.savefig(outname)
-        plt.close()
-
-        plt.figure()
-        ops_list = list(fitness_deltas_dict.keys())
-        deltas_list = [fitness_deltas_dict[op] for op in ops_list]
-        plt.bar(ops_list, deltas_list)
-        plt.axhline(y=0.0, color='gray', linestyle='--')
-        plt.title(f"Operator Cumulative Deltas (Gen {gen})\nScore={score:.4f}")
-        plt.xlabel("Operator")
-        plt.ylabel("Cumulative Fitness Delta")
-        plt.tight_layout()
-        outname = os.path.join(gen_dir, f"best_fitness_deltas_gen_{gen}.png")
-        plt.savefig(outname)
-        plt.close()
-
-
-def plot_population_operator_stats(population, generation, gen_dir):
-    operator_list = ["init", "mutate", "crossover", "evolve_1", "evolve_2", "reflect"]
-    usage_sums = {op: 0 for op in operator_list}
-    delta_sums = {op: 0.0 for op in operator_list}
-    for cand in population:
-        for op in operator_list:
-            usage_sums[op] += cand["counts"].get(op, 0)
-            delta_sums[op] += cand["fitness_deltas"].get(op, 0.0)
-    plt.figure()
-    ops_list = list(usage_sums.keys())
-    usage_vals = [usage_sums[op] for op in ops_list]
-    plt.bar(ops_list, usage_vals)
-    plt.title(f"All-Pop Operator Usage (Gen {generation})")
-    plt.xlabel("Operator")
-    plt.ylabel("Usage Count")
-    outname = os.path.join(gen_dir, f"operator_usage_all_gen_{generation}.png")
-    plt.tight_layout()
-    plt.savefig(outname)
-    plt.close()
-
-    plt.figure()
-    delta_vals = [delta_sums[op] for op in ops_list]
-    plt.bar(ops_list, delta_vals)
-    plt.axhline(y=0.0, color='gray', linestyle='--')
-    plt.title(f"All-Pop Operator Deltas (Gen {generation})")
-    plt.xlabel("Operator")
-    plt.ylabel("Sum of Fitness Deltas")
-    outname = os.path.join(gen_dir, f"operator_deltas_all_gen_{generation}.png")
-    plt.tight_layout()
-    plt.savefig(outname)
-    plt.close()
-
-
 def save_population_to_csv(population, generation, gen_dir):
     rows = []
     for i, cand in enumerate(population):
@@ -776,61 +611,44 @@ def run_evo_strat(population):
         plot_best_trajectory_across_generations(best_history, gen_dir)
 
 
-# ---------------------------
-# Main
-# ---------------------------
-if __name__ == "__main__":
+def run(
+    *,
+    population_size_value: int = 25,
+    num_generations_value: int = 25,
+    farm_ids: Optional[List[int]] = None,
+    init_value: bool = True,
+    use_hint_value: bool = True,
+    use_template_value: bool = False,
+    halstead_metrics_value: bool = False,
+) -> None:
+    """Execute the graph evolutionary strategy workflow with configurable parameters."""
+
+    global cfg, capture, population_size, num_generations
+    global init, use_hint, use_template, halstead_metrics, hint
+    global common_task_instructions, params_instructions, halstead_instructions
+    global conn_dir, heur_dir, gen_dir, score_file, metrics_file, input_json, ground_truth
+
     cfg = Config()
     capture = CommandOutputCapture()
-    population_size = 25
-    num_generations = 25
-    init = True
-    use_hint = True
-    use_template = False
-    halstead_metrics = False
+    population_size = population_size_value
+    num_generations = num_generations_value
+    init = init_value
+    use_hint = use_hint_value
+    use_template = use_template_value
+    halstead_metrics = halstead_metrics_value
 
-    common_task_instructions = (
-        "The python programs are trying to solve the task of deciding which interventions need to be done at which agricultural plots "
-        "(crops, type='ag_plot') and how to place them geometrically based on how the interventions increase ecological connectivity, "
-        "while not decreasing NPV from a baseline value. "
-        "The choice is between margin (convert only the margins) and habitat (convert a contiguous region) interventions. "
-        "The margin interventions are chosen among the following directions on the boundary: "
-        "north-east, north-west, south-east, south-west. The habitat conversions "
-        "are chosen among the same directions in the internal area of polygons. "
-        "The directions are computed by running a horizontal and a vertical line through the centre of each plot, and "
-        "choosing them if they have interventions (as computed by IPOPT optimization) greater than a threshold. "
-        "Existing habitat plots (type='hab_plots') remain unaffected. "
-        "Integral index of connectivity (IIC) is used as the metric for ecological connectivity, which tries to increase the "
-        "size of the connected components in the neighbourhood. It promotes fractions touching each other and extending the "
-        "connectivity between existing habitats in the landscape, which includes the farm and its neighbours. "
-        "There is a tradeoff between maximizing connectivity and maintaining NPV. "
-        "NPV is calculated based on how the interventions affect pollination and pest control "
-        "services over distance and time, and how these affect yield. There is also the tradeoff between the cost of implementation and "
-        "maintenance vs the benefit of increased yield. Look at properties that you think have a pattern "
-        "(like yield, label, type, nbs, geometry, do not use plot_ids to assign rules), "
-        "and the relative positioning of both the farm neighbours with respect to your farm and "
-        "the plots with respect to each other within the farm in the context of ecological connectivity. "
-        "Use all the given geometry information to infer these geographical relationships. \n\n"
-    )
+    common_task_instructions = GRAPH_COMMON_TASK_INSTRUCTIONS
+    params_instructions = GRAPH_PARAMS_INSTRUCTIONS
+    halstead_instructions = GRAPH_HALSTEAD_INSTRUCTIONS
 
-    params_instructions = (
-        "You can incorporate parameters like crop prices and implementation and maintenance costs "
-        "provided here in your heuristics. These are the crop prices in USD/Tonne: {'Soybeans': 370, 'Oats': 95, 'Corn': 190, 'Canola/rapeseed': 1100, "
-        "'Barley': 120, 'Spring wheat': 200}, and these are the costs (implementation costs one time and in USD/ha, and "
-        "maintenance costs in USD/ha/year) : {'margin': {'implementation': 400,  'maintenance': 60}, 'habitat': {"
-        "'implementation': 300, 'maintenance': 70}, 'agriculture': {'maintenance': 100}}. \n\n"
-    )
+    target_farm_ids = farm_ids or [3]
 
-    halstead_instructions = ("Generate python code with high halstead metrics like h1, h2, N1, N2, volume, "
-                             "difficulty, length, effort, and vocabulary.\n\n")
+    farm_root = cfg.data_dir
+    all_farms_geojson_path = os.path.join(farm_root, "farms_cp.geojson")
 
-    farm_dir = cfg.data_dir
-    all_farms_geojson_path = os.path.join(farm_dir, "farms_cp.geojson")
-
-    farm_ids = [3]
-    for farm_id in farm_ids:
-        print(f"Running farm:{farm_id}")
-        conn_dir = os.path.join(farm_dir, f"farm_{farm_id}", "connectivity")
+    for farm_identifier in target_farm_ids:
+        print(f"Running farm:{farm_identifier}")
+        conn_dir = os.path.join(farm_root, f"farm_{farm_identifier}", "connectivity")
         heur_dir = os.path.join(conn_dir, "heuristics")
         if not os.path.exists(heur_dir):
             os.makedirs(heur_dir)
@@ -864,15 +682,39 @@ if __name__ == "__main__":
             "compare and come up with the right heuristics. "
         )
 
-        # Extract model name from config
         config_model = cfg.lm.split('/')[-1] if '/' in cfg.lm else cfg.lm
-        heur_model, fix_model = init_gemini_model(heur_model_name=config_model,
-                                                  fix_model_name=config_model)
+        heur_model, fix_model = init_gemini_model(
+            heur_model_name=config_model,
+            fix_model_name=config_model,
+        )
         if init:
-            create_graph_prompt_file(farm_id, all_farms_geojson_path, farm_dir, use_hint=use_hint)
+            create_graph_prompt_file(farm_identifier, all_farms_geojson_path, farm_root, use_hint=use_hint)
             create_init_population(heur_model, fix_model)
 
         init_population = get_init_population()
         run_evo_strat(init_population)
 
         print("done")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run the graph evolutionary strategy workflow.")
+    parser.add_argument("--population-size", type=int, default=25, help="Population size for the evolutionary loop.")
+    parser.add_argument("--num-generations", type=int, default=25, help="Number of generations to evolve.")
+    parser.add_argument("--farm-ids", type=int, nargs="+", default=[3], help="Target farm IDs to process.")
+    parser.add_argument("--no-init", action="store_true", help="Skip regenerating the initial population with Gemini.")
+    parser.add_argument("--no-hint", action="store_true", help="Disable hint usage in prompt construction.")
+    parser.add_argument("--use-template", action="store_true", help="Enable template usage for prompts.")
+    parser.add_argument("--halstead-metrics", action="store_true", help="Enable halstead-focused instructions.")
+
+    args = parser.parse_args()
+
+    run(
+        population_size_value=args.population_size,
+        num_generations_value=args.num_generations,
+        farm_ids=args.farm_ids,
+        init_value=not args.no_init,
+        use_hint_value=not args.no_hint,
+        use_template_value=args.use_template,
+        halstead_metrics_value=args.halstead_metrics,
+    )

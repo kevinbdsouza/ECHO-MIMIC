@@ -4,11 +4,14 @@ import json
 import os
 from pathlib import Path
 import numpy as np
-from rate_limiter import send_message_with_retry
-from iga_eh.create_prompts import *
-from tools import *
-from config import Config
-from common import (
+from echo_mimic.rate_limiter import send_message_with_retry
+from echo_mimic.prompts.farm import (
+    create_farm_prompt_file,
+    create_plot_prompt_file,
+)
+from echo_mimic.tools import *
+from echo_mimic.config import Config
+from echo_mimic.common import (
     build_model,
     configure_genai,
     ensure_rate_limiter,

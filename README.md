@@ -28,15 +28,25 @@ The framework is demonstrated on agricultural landscape management, where local 
 ## Project Structure
 
 ```
-echo_mimic/
-├── config.py                    # Configuration and parameters
-├── dspy_baseline_*.py          # DSPy baseline implementations
-├── *_evo_strat.py              # Evolutionary strategy implementations
-├── run_experimental_suite.py   # Personality-Nudge experimental runner
-├── rate_limiter.py             # API rate limiting utilities
-├── create_prompts.py           # Prompt generation utilities
-└── requirements.txt            # Python dependencies
+.
+├── echo_mimic/
+│   ├── __init__.py              # Package entry point
+│   ├── config.py                # Configuration and parameters
+│   ├── common/                  # LLM helpers, code execution, and fix utilities
+│   ├── prompts/                 # Prompt generation utilities
+│   ├── tools.py                 # Plotting, metrics, and helper routines
+│   ├── utils.py                 # Geometry helpers and plotting utilities
+│   ├── rate_limiter.py          # API rate limiting utilities
+│   └── dspy_rate_limiter.py     # DSPy LM wrapper with rate limiting
+├── create_prompts.py            # Backwards-compatible prompt exports
+├── dspy_baseline_*.py           # DSPy baseline implementations
+├── *_evo_strat.py               # Evolutionary strategy entry points
+├── run_experimental_suite.py    # Personality-Nudge experimental runner
+└── requirements.txt             # Python dependencies
 ```
+
+All shared runtime logic now lives under the structured `echo_mimic` package, while the
+high-level experiment drivers remain as top-level scripts.
 
 ## Core Components
 
@@ -158,7 +168,6 @@ The `config.py` file contains all major configuration parameters:
 - **Rate Limiting**: API request throttling parameters
 - **Economic Parameters**: Crop prices, costs, discount rates
 - **Spatial Parameters**: Habitat types, intervention costs
-- **Evolutionary Strategy**: Population sizes, generation counts
 
 ## Data Format
 

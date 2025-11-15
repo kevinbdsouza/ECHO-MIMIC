@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from rate_limiter import RateLimiter, send_message_with_retry
+from ..rate_limiter import RateLimiter, send_message_with_retry
 
 from .text_utils import extract_python_code
 

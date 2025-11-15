@@ -1,6 +1,6 @@
 import os.path
 import pandas as pd
-from config import Config
+from .config import Config
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import Polygon as MplPolygon

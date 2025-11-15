@@ -7,8 +7,8 @@ import time
 import logging
 from typing import Any, Dict, List, Optional, Union
 import dspy
-from rate_limiter import RateLimiter, RateLimitError
-from config import Config
+from .rate_limiter import RateLimiter, RateLimitError
+from .config import Config
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

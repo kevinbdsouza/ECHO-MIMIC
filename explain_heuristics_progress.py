@@ -1,6 +1,6 @@
 import os
 import google.generativeai as genai
-from rate_limiter import RateLimiter, send_message_with_retry
+from echo_mimic.rate_limiter import RateLimiter, send_message_with_retry
 from ei_ec.config import Config
 import numpy as np
 from dotenv import load_dotenv
@@ -48,7 +48,7 @@ def init_gemini_model(model_name="gemini-2.0-flash-thinking-exp-01-21", system_p
         system_instruction=system_prompt
     )
     # Initialize rate limiter
-    from config import Config
+    from echo_mimic.config import Config
     cfg = Config()
     global rate_limiter
     rate_limiter = RateLimiter(**cfg.rate_limit)
@@ -122,7 +122,7 @@ def main():
         return
 
     # Initialize the Gemini model
-    from config import Config
+    from echo_mimic.config import Config
     cfg = Config()
     config_model = cfg.lm.split('/')[-1] if '/' in cfg.lm else cfg.lm
     explanation_model = init_gemini_model(model_name=config_model,

@@ -3,11 +3,11 @@ import os, sys, json, glob, random, pathlib, math, copy, subprocess, tempfile
 import math, time
 from collections import defaultdict
 from typing import Dict, Any, List, Tuple
-from config import Config
+from echo_mimic.config import Config
 import dspy
 from dspy.teleprompt import MIPROv2, BootstrapFewShot
 from dotenv import load_dotenv
-from dspy_rate_limiter import configure_dspy_with_rate_limiting
+from echo_mimic.dspy_rate_limiter import configure_dspy_with_rate_limiting
 
 # top-level
 BEST = {}  # farm_path -> (best_score, code_text)

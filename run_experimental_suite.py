@@ -1,5 +1,5 @@
 import google.generativeai as genai
-from rate_limiter import send_message_with_retry
+from echo_mimic.rate_limiter import send_message_with_retry
 import random
 import os
 import shutil
@@ -9,10 +9,8 @@ import numpy as np
 import re
 import math
 import pandas as pd
-from radon.raw import analyze
-from radon.complexity import cc_visit
-from radon.metrics import h_visit, mi_visit
-from common import (
+from echo_mimic.metrics import compute_radon_metrics
+from echo_mimic.common import (
     CommandOutputCapture,
     build_model,
     configure_genai,
@@ -22,7 +20,7 @@ from common import (
     fix_with_model,
     validate_python_code,
 )
-from config import Config
+from echo_mimic.config import Config
 
 capture = CommandOutputCapture()
 cfg = Config()  # Initialize your config
@@ -514,66 +512,6 @@ def select_population(population_messages, scores, codes, population_size_target
     return selected_population_messages, selected_scores, selected_codes
 
 
-def compute_radon_metrics_exp(old_df, python_codes, fitness_scores):
-    # This function is mostly self-contained and can be used as is from original if `analyze`, etc. are available
-    # For brevity, assuming it's available and correct.
-    # (Copied from original for completeness of this file if run standalone)
-    new_rows = []
-    for code, score in zip(python_codes, fitness_scores):
-        if not code or not isinstance(code, str) or code.strip() == "":  # Skip if no code
-            continue
-        try:
-            raw_metrics = analyze(code)
-            complexities = cc_visit(code)
-            avg_cyclomatic_complexity = sum(c.complexity for c in complexities) / len(
-                complexities) if complexities else 0.0
-            halstead_results = h_visit(code)
-            if len(halstead_results) > 0:  # Radon's h_visit might return a list or a HalsteadResult object
-                # Accessing .total might be specific to how it's aggregated.
-                # For simplicity, let's assume halstead_results itself has these if it's a single aggregated object,
-                # or we'd iterate if it's a list of function-specific results.
-                # The original code implies halstead_results.total, so it might be an aggregated object.
-                # If h_visit returns a list:
-                # total_h1 = sum(h.h1 for h in halstead_results.total) if halstead_results.total else 0 ... (this looks wrong)
-                # Simpler:
-                total_h1, total_h2, total_N1, total_N2 = 0, 0, 0, 0
-                total_vocab, total_len, total_vol, total_diff, total_eff, total_time, total_bugs = 0, 0, 0, 0, 0, 0, 0
-                # This part needs careful adaptation based on actual radon output structure for h_visit
-                # Assuming h_visit returns an object with a 'total' attribute that holds all these:
-                if hasattr(halstead_results, 'total') and halstead_results.total:
-                    hr_total = halstead_results.total
-                    total_h1, total_h2 = hr_total.h1, hr_total.h2
-                    total_N1, total_N2 = hr_total.N1, hr_total.N2
-                    total_vocab, total_len = hr_total.vocabulary, hr_total.length
-                    total_vol, total_diff = hr_total.volume, hr_total.difficulty
-                    total_eff, total_time, total_bugs = hr_total.effort, hr_total.time, hr_total.bugs
-                else:  # if halstead_results is a list or no .total
-                    pass  # metrics remain 0
-
-            else:
-                total_h1, total_h2, total_N1, total_N2 = 0, 0, 0, 0
-                total_vocab, total_len, total_vol, total_diff, total_eff, total_time, total_bugs = 0, 0, 0, 0, 0, 0, 0
-
-            mi_value = mi_visit(code, multi=True)
-
-            row = {
-                'fitness_score': score, 'loc': raw_metrics.loc, 'lloc': raw_metrics.lloc,
-                'sloc': raw_metrics.sloc, 'comment': raw_metrics.comments, 'multi': raw_metrics.multi,
-                'blank': raw_metrics.blank, 'avg_cyclomatic_complexity': avg_cyclomatic_complexity,
-                'maintainability_index': mi_value,
-                'halstead_h1': total_h1, 'halstead_h2': total_h2, 'halstead_N1': total_N1, 'halstead_N2': total_N2,
-                'halstead_vocabulary': total_vocab, 'halstead_length': total_len, 'halstead_volume': total_vol,
-                'halstead_difficulty': total_diff, 'halstead_effort': total_eff, 'halstead_time': total_time,
-                'halstead_bugs': total_bugs,
-            }
-            new_rows.append(row)
-        except Exception as e:
-            print(f"Radon metrics failed for a code block: {e}")
-            continue
-    new_df = pd.DataFrame(new_rows)
-    metrics_df = pd.concat([old_df, new_df], ignore_index=True)
-    return metrics_df
-
 
 def run_reflect_exp(population_messages, scores, policy_model, current_nudge_policy_instructions_str,
                     ground_truth_data, farm_model, fix_model, current_farm_prompt_instructions_str,
@@ -710,7 +648,7 @@ def run_evo_strat_exp(
         with open(best_python_file, 'w') as f: f.write(current_codes[best_idx])
 
     metrics_df = pd.DataFrame()  # Initialize empty
-    metrics_df = compute_radon_metrics_exp(metrics_df, current_codes, current_scores)
+    metrics_df = compute_radon_metrics(metrics_df, current_codes, current_scores)
     metrics_df.to_csv(metrics_file_path, index=False)
 
     selected_population_msgs, selected_scores, selected_codes = select_population(
@@ -779,7 +717,7 @@ def run_evo_strat_exp(
             print(f"No scores after reflection for gen {generation + 1}. Stopping.")
             break
 
-        metrics_df = compute_radon_metrics_exp(metrics_df, final_codes, final_scores)  # Compute for all evaluated
+        metrics_df = compute_radon_metrics(metrics_df, final_codes, final_scores)  # Compute for all evaluated
 
         best_idx_gen = np.argmax(final_scores)
         line = f"Experiment: {experiment_label} - Generation {generation + 1} : Best Score - {final_scores[best_idx_gen]:.4f}\n"

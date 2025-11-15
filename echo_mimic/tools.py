@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 import pandas as pd
 import matplotlib.pyplot as plt
-from config import Config
+from .config import Config
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import Lasso
