@@ -1,0 +1,33 @@
+ECHO Stage 2 (Imitation) — Agent {agent_id}
+==========================================
+
+Scenario id: {scenario_id}
+Slots (index → hour): {slots}
+Retail tariff ($/kWh): {price}
+Grid carbon intensity (gCO2/kWh): {carbon}
+Feeder capacity (kW equivalent): {capacity}
+Baseline non-EV load (kW): {baseline}
+
+Your profile
+------------
+Persona: {persona}
+Base demand per slot: {base_demand}
+Preferred slots: {preferred_slots}
+Comfort penalty when deviating: {comfort_penalty}
+
+Observed neighbour exemplars
+----------------------------
+{neighbor_examples}
+
+Task
+----
+Write a Python script that:
+1. Loads ``scenario.json`` using only filesystem context that would be available to this agent.
+2. Chooses the slot that best matches the imitation-stage objective described in the agent sheet.
+3. Writes ``local_policy_output.json`` containing the chosen slot index for this agent only.
+
+Constraints
+-----------
+• Use only the information in this prompt. Other agents' private data must remain hidden.
+• Preserve the JSON output format and keep the payload to a single integer value.
+• Do not attempt to coordinate with non-neighbour agents at this stage.

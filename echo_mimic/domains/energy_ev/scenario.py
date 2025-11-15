@@ -159,20 +159,37 @@ def enumerate_local_optima(scenario: EVScenario) -> Dict[int, List[int]]:
 
 
 def dump_ground_truth(directory: Path, scenario: EVScenario) -> None:
-    """Write local and global ground-truth files into ``directory``."""
+    """Write local, global, and nudge ground-truth files into ``directory``."""
 
-    local_path = directory / "local" / "ground_truth.json"
-    local_payload = {
-        str(agent_id): slots for agent_id, slots in enumerate_local_optima(scenario).items()
-    }
+    local_dir = directory / "local"
+    local_dir.mkdir(parents=True, exist_ok=True)
+
+    local_optima = enumerate_local_optima(scenario)
+    local_path = local_dir / "ground_truth.json"
+    local_payload = {str(agent_id): slots for agent_id, slots in local_optima.items()}
     local_path.write_text(
         json.dumps(local_payload, indent=2) + "\n",
         encoding="utf-8",
     )
 
+    for agent in scenario.agents:
+        agent_local_dir = local_dir / f"agent_{agent.id}"
+        agent_local_dir.mkdir(parents=True, exist_ok=True)
+        agent_local_payload = {
+            "agent_id": agent.id,
+            "persona": agent.persona,
+            "best_slots": local_optima.get(agent.id, []),
+        }
+        agent_local_path = agent_local_dir / "ground_truth.json"
+        agent_local_path.write_text(
+            json.dumps(agent_local_payload, indent=2) + "\n", encoding="utf-8"
+        )
+
+    global_dir = directory / "global"
+    global_dir.mkdir(parents=True, exist_ok=True)
+
     global_opt, global_score = enumerate_global_optimum(scenario)
-    (directory / "global").mkdir(parents=True, exist_ok=True)
-    global_path = directory / "global" / "ground_truth.json"
+    global_path = global_dir / "ground_truth.json"
     global_payload = {
         "best_allocation": global_opt,
         "objective": global_score,
@@ -184,4 +201,46 @@ def dump_ground_truth(directory: Path, scenario: EVScenario) -> None:
         },
     }
     global_path.write_text(json.dumps(global_payload, indent=2) + "\n", encoding="utf-8")
+
+    for idx, agent in enumerate(scenario.agents, start=1):
+        agent_global_dir = global_dir / f"agent_{agent.id}"
+        agent_global_dir.mkdir(parents=True, exist_ok=True)
+        agent_global_payload = {
+            "agent_id": agent.id,
+            "persona": agent.persona,
+            "recommended_slot": int(global_opt[idx - 1]),
+            "objective": global_score,
+        }
+        agent_global_path = agent_global_dir / "ground_truth.json"
+        agent_global_path.write_text(
+            json.dumps(agent_global_payload, indent=2) + "\n", encoding="utf-8"
+        )
+
+    nudge_dir = directory / "nudge"
+    nudge_dir.mkdir(parents=True, exist_ok=True)
+    recommended_allocation_path = nudge_dir / "recommended_allocation.json"
+    recommended_allocation_payload = {
+        "allocation": global_opt,
+        "objective": global_score,
+        "notes": f"Derived from brute-force enumeration of the global objective for scenario {scenario.scenario_id}.",
+    }
+    recommended_allocation_path.write_text(
+        json.dumps(recommended_allocation_payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    for idx, agent in enumerate(scenario.agents, start=1):
+        agent_nudge_dir = nudge_dir / f"agent_{agent.id}"
+        agent_nudge_dir.mkdir(parents=True, exist_ok=True)
+        agent_nudge_payload = {
+            "agent_id": agent.id,
+            "persona": agent.persona,
+            "recommended_slot": int(global_opt[idx - 1]),
+            "local_best_slots": local_optima.get(agent.id, []),
+            "notes": "Nudge messages should reconcile the agent's imitation heuristic with the coordinated recommendation.",
+        }
+        agent_nudge_path = agent_nudge_dir / "context.json"
+        agent_nudge_path.write_text(
+            json.dumps(agent_nudge_payload, indent=2) + "\n", encoding="utf-8"
+        )
 
