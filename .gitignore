@@ -7,6 +7,7 @@ bck/
 data_bck/
 old/
 __pycache__/
+__pycache__
 
 .DS_Store
 .idea/
