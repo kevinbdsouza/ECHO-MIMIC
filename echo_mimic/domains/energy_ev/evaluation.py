@@ -7,7 +7,12 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
-from .scenario import EVScenario, enumerate_global_optimum, enumerate_local_optima, compute_global_cost
+from .scenario import (
+    EVScenario,
+    enumerate_global_optimum,
+    enumerate_local_optima,
+    compute_global_cost,
+)
 
 
 def _run_python_script(script_path: Path, workdir: Path) -> subprocess.CompletedProcess:
@@ -158,6 +163,152 @@ def evaluate_nudge_response(
         "status": "ok" if score > 0 else "mismatch",
         "persona": persona,
         "agent_index": agent_index + 1,
+        "recommended_slot": recommended_slot,
+        "target_slot": target_slot,
+        "message": text,
+    }
+    return score, detail
+
+
+def evaluate_local_agent_policy_script(
+    code: str,
+    *,
+    scenario: EVScenario,
+    scenario_dir: Path,
+    agent_id: int,
+    output_filename: str = "local_policy_output.json",
+) -> Tuple[float, Dict[str, object]]:
+    """Execute and score an imitation policy for a single agent."""
+
+    agent_dir = scenario_dir / "local" / f"agent_{agent_id}"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    script_path = agent_dir / "_candidate_local.py"
+    script_path.write_text(code, encoding="utf-8")
+
+    result = _run_python_script(script_path, agent_dir)
+    if result.returncode != 0:
+        return 0.0, {"status": "error", "stderr": result.stderr}
+
+    output_path = agent_dir / output_filename
+    if not output_path.exists():
+        return 0.0, {"status": "missing_output"}
+
+    with output_path.open("r", encoding="utf-8") as handle:
+        try:
+            payload = json.load(handle)
+        except json.JSONDecodeError as exc:
+            return 0.0, {"status": "invalid_json", "error": str(exc)}
+
+    try:
+        choice = int(payload)
+    except (TypeError, ValueError):
+        return 0.0, {"status": "non_integer", "output": payload}
+
+    local_optima = enumerate_local_optima(scenario)
+    best_slots = local_optima.get(agent_id)
+    if best_slots is None:
+        return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
+
+    score = 1.0 if choice in best_slots else 0.0
+    detail = {
+        "status": "ok" if score > 0 else "mismatch",
+        "agent_id": agent_id,
+        "choice": choice,
+        "best": best_slots,
+    }
+    return score, detail
+
+
+def evaluate_global_agent_policy_script(
+    code: str,
+    *,
+    scenario: EVScenario,
+    scenario_dir: Path,
+    agent_id: int,
+    output_filename: str = "global_policy_output.json",
+) -> Tuple[float, Dict[str, object]]:
+    """Execute and score a coordination policy for a single agent."""
+
+    agent_dir = scenario_dir / "global" / f"agent_{agent_id}"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    script_path = agent_dir / "_candidate_global.py"
+    script_path.write_text(code, encoding="utf-8")
+
+    result = _run_python_script(script_path, agent_dir)
+    if result.returncode != 0:
+        return 0.0, {"status": "error", "stderr": result.stderr}
+
+    output_path = agent_dir / output_filename
+    if not output_path.exists():
+        return 0.0, {"status": "missing_output"}
+
+    with output_path.open("r", encoding="utf-8") as handle:
+        try:
+            payload = json.load(handle)
+        except json.JSONDecodeError as exc:
+            return 0.0, {"status": "invalid_json", "error": str(exc)}
+
+    try:
+        choice = int(payload)
+    except (TypeError, ValueError):
+        return 0.0, {"status": "non_integer", "output": payload}
+
+    best_allocation, best_score = enumerate_global_optimum(scenario)
+    if agent_id < 1 or agent_id > len(best_allocation):
+        return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
+
+    target = int(best_allocation[agent_id - 1])
+    score = 1.0 if choice == target else 0.0
+    detail = {
+        "status": "ok" if score > 0 else "mismatch",
+        "agent_id": agent_id,
+        "choice": choice,
+        "target": target,
+        "objective": best_score,
+    }
+    return score, detail
+
+
+def evaluate_agent_nudge_response(
+    message: str,
+    *,
+    scenario: EVScenario,
+    agent_id: int,
+) -> Tuple[float, Dict[str, object]]:
+    """Validate a personalised nudge and ensure the slot matches the coordinated plan."""
+
+    try:
+        payload = json.loads(message)
+    except json.JSONDecodeError as exc:
+        return 0.0, {"status": "invalid_json", "error": str(exc)}
+
+    required_keys = {"persona", "recommended_slot", "message"}
+    if not required_keys.issubset(payload):
+        return 0.0, {"status": "missing_keys", "payload": payload}
+
+    try:
+        recommended_slot = int(payload["recommended_slot"])
+    except (TypeError, ValueError):
+        return 0.0, {"status": "bad_slot", "value": payload["recommended_slot"]}
+
+    persona = str(payload["persona"])
+    text = str(payload["message"])
+
+    if agent_id < 1 or agent_id > len(scenario.agents):
+        return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
+
+    agent = scenario.agents[agent_id - 1]
+    if persona != agent.persona:
+        return 0.0, {"status": "persona_mismatch", "expected": agent.persona, "received": persona}
+
+    best_allocation, _ = enumerate_global_optimum(scenario)
+    target_slot = int(best_allocation[agent_id - 1])
+
+    score = 1.0 if recommended_slot == target_slot else 0.0
+    detail = {
+        "status": "ok" if score > 0 else "mismatch",
+        "agent_id": agent_id,
+        "persona": persona,
         "recommended_slot": recommended_slot,
         "target_slot": target_slot,
         "message": text,

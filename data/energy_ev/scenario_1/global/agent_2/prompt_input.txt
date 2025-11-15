@@ -1,0 +1,40 @@
+ECHO Stage 3 (Collective) — Agent 2
+===========================================
+
+Scenario id: ev_peak_sharing_1
+Slots (index → hour): 0: 19-20, 1: 20-21, 2: 21-22, 3: 22-23
+Feeder capacity: 7.0
+Baseline load: 5.2, 5.6, 5.0, 6.7
+Carbon intensity: 560, 500, 520, 420
+Weights: α=40.00, β=0.50
+
+Your profile
+------------
+Persona: Grid analyst who cares about transformer life
+Base demand per slot: 0.60, 1.00, 0.70, 0.50
+Preferred slots: 0, 1
+Comfort penalty baseline: 0.12
+
+Neighbour observations
+----------------------
+- Neighbor 1 → slot 1 (Neighbor slides to 20-21h when price gap widens)
+- Neighbor 3 → slot 2 (Central neighbor sticks to 21-22h unless carbon spikes)
+
+Goal
+----
+Design Python heuristics that choose a slot for this agent which helps minimise the global score:
+    score(a) = α * max_t max(0, baseline[t] + EV_count[t] − capacity) + β * carbon_term(a)
+while respecting the fact that you can only observe the neighbours listed above.
+
+Output specification
+--------------------
+1. Load ``scenario.json`` using only paths visible from the agent directory.
+2. Decide on a slot recommendation for this agent that balances local comfort with global coordination.
+3. Write ``global_policy_output.json`` containing just this agent's recommended slot index.
+
+Keep reasoning local
+--------------------
+• Do not assume knowledge of non-neighbour households.
+• Explainable heuristics that can be combined with other agents will be favoured downstream.
+• Your output will be compared against the globally optimal allocation for this agent.
+

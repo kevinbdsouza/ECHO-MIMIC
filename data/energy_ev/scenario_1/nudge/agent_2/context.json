@@ -1,0 +1,9 @@
+{
+  "agent_id": 2,
+  "persona": "Grid analyst who cares about transformer life",
+  "recommended_slot": 1,
+  "local_best_slots": [
+    1
+  ],
+  "notes": "Nudge messages should reconcile the agent's imitation heuristic with the coordinated recommendation."
+}

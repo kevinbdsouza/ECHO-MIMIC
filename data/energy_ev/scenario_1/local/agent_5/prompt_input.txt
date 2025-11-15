@@ -1,0 +1,35 @@
+ECHO Stage 2 (Imitation) — Agent 5
+==========================================
+
+Scenario id: ev_peak_sharing_1
+Slots (index → hour): 0: 19-20, 1: 20-21, 2: 21-22, 3: 22-23
+Retail tariff ($/kWh): 0.28, 0.19, 0.26, 0.22
+Grid carbon intensity (gCO2/kWh): 560, 500, 520, 420
+Feeder capacity (kW equivalent): 7.0
+Baseline non-EV load (kW): 5.2, 5.6, 5.0, 6.7
+
+Your profile
+------------
+Persona: Student tenant juggling late classes
+Base demand per slot: 0.50, 0.60, 0.70, 0.80
+Preferred slots: 3
+Comfort penalty when deviating: 0.10
+
+Observed neighbour exemplars
+----------------------------
+- Neighbor 4 → slot 3 (Upstream neighbor usually sits at 22-23h unless feeder alarms)
+- Neighbor 4 → slot 2 (On price spike nights upstream shifts to 21-22h to dodge carbon)
+
+Task
+----
+Write a Python script that:
+1. Loads ``scenario.json`` using only filesystem context that would be available to this agent.
+2. Chooses the slot that best matches the imitation-stage objective described in the agent sheet.
+3. Writes ``local_policy_output.json`` containing the chosen slot index for this agent only.
+
+Constraints
+-----------
+• Use only the information in this prompt. Other agents' private data must remain hidden.
+• Preserve the JSON output format and keep the payload to a single integer value.
+• Do not attempt to coordinate with non-neighbour agents at this stage.
+

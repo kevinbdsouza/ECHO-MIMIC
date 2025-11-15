@@ -1,0 +1,9 @@
+{
+  "agent_id": 4,
+  "persona": "Retired couple monitoring comfort and bills",
+  "recommended_slot": 3,
+  "local_best_slots": [
+    3
+  ],
+  "notes": "Nudge messages should reconcile the agent's imitation heuristic with the coordinated recommendation."
+}
