@@ -30,9 +30,12 @@ Output specification
 1. Load ``scenario.json`` using only paths visible from the agent directory.
 2. Decide on a slot recommendation for this agent that balances local comfort with global coordination.
 3. Write ``global_policy_output.json`` containing just this agent's recommended slot index.
+4. Save the executable script as ``policy.py`` so ``python policy.py`` recreates ``global_policy_output.json`` inside this folder.
 
 Keep reasoning local
 --------------------
 • Do not assume knowledge of non-neighbour households.
 • Explainable heuristics that can be combined with other agents will be favoured downstream.
 • Your output will be compared against the globally optimal allocation for this agent.
+• ``scenario.json`` is available at ``../../scenario.json`` relative to this directory—resolve it programmatically.
+• Return only the Python source of ``policy.py``; omit explanations, markdown, or additional text.

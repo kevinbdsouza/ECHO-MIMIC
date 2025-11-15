@@ -28,3 +28,4 @@ Guidelines
 • Keep the message under 120 words and provide tangible energy or carbon benefits.
 • Respect the agent's preferences and comfort penalties when framing the request.
 • Do not reference agents or information outside the neighbourhood evidence shown.
+• Respond with a valid, minified JSON object string only—no extra prose or markdown.
