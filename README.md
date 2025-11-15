@@ -118,6 +118,35 @@ python nudge_evo_strat.py       # Evolutionary approach
 python dspy_baseline_nudge.py   # DSPy baseline comparison
 ```
 
+### Carbon-Aware EV Charging Scenario
+
+A compact five-agent energy domain is bundled alongside the agricultural
+experiments. The scenario captures carbon-aware EV charging with feeder
+capacity limits and ships with the full four-stage pipeline assets:
+
+- `data/energy_ev/scenario_1/scenario.json`: core state, objectives, and neighbor
+  exemplars.
+- Stage-specific prompts under `data/energy_ev/scenario_1/{local,global,nudge}`.
+- Brute-force ground truths for imitation and collective stages, plus the global
+  optimum allocation for nudging.
+- Sample Python heuristics and a nudge message demonstrating end-to-end usage.
+
+Regenerate artifacts or score new solutions with `energy_pipeline.py`:
+
+```bash
+# Refresh prompts + ground truth after editing scenario.json
+python energy_pipeline.py generate
+
+# Score a local imitation heuristic
+python energy_pipeline.py evaluate-local data/energy_ev/scenario_1/local/heuristics_baseline.py
+
+# Score a global coordination heuristic
+python energy_pipeline.py evaluate-global data/energy_ev/scenario_1/global/heuristics_baseline.py
+
+# Validate a nudging message JSON payload
+python energy_pipeline.py evaluate-nudge data/energy_ev/scenario_1/nudge/sample_nudge.json
+```
+
 ## Key Concepts
 
 ### ECHO-MIMIC Pipeline: From ISPs to WSPs

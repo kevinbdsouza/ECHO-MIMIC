@@ -1,0 +1,23 @@
+Carbon-aware EV charging scenario: {scenario_id}
+
+Storyworld summary:
+{description}
+
+Shared parameters
+-----------------
+Slots (index → hour): {slots}
+Feeder capacity (kW equivalent): {capacity}
+Baseline non-EV load (kW): {baseline}
+Retail tariff ($/kWh): {price}
+Grid carbon intensity (gCO2/kWh): {carbon}
+Global weights α={alpha}, β={beta}
+
+Agent roster (ordered along the feeder)
+--------------------------------------
+{agents}
+
+Task framing
+------------
+• Each household charges exactly one normalized EV unit in a single slot.
+• Neighboring context is communicated using short in-context exemplars.
+• The pipeline provides the four-stage ECHO-MIMIC workflow for this energy domain.

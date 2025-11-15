@@ -1,0 +1,130 @@
+{
+  "scenario_id": "ev_peak_sharing_1",
+  "description": "Five prosumer households schedule single EV charge across four hourly slots with shared feeder constraints and carbon intensity.",
+  "slots": ["19-20", "20-21", "21-22", "22-23"],
+  "capacity": 7.0,
+  "baseline_load": [5.2, 5.6, 5.0, 6.7],
+  "price": [0.28, 0.19, 0.26, 0.22],
+  "carbon_intensity": [560, 500, 520, 420],
+  "agents": [
+    {
+      "id": 1,
+      "base_demand": [1.1, 0.8, 0.7, 0.6],
+      "preferred_slots": [1, 3],
+      "comfort_penalty": 0.16,
+      "persona": "Budget-sensitive engineer with a solar-equipped townhouse",
+      "neighbor_examples": [
+        {
+          "neighbor_id": 2,
+          "base_demand": [0.6, 1.0, 0.7, 0.5],
+          "preferred_slots": [0, 1],
+          "action": 1,
+          "note": "Neighbor moved earlier to ride lower price despite mild carbon bump"
+        },
+        {
+          "neighbor_id": 2,
+          "base_demand": [0.6, 1.0, 0.7, 0.5],
+          "preferred_slots": [0, 1],
+          "action": 0,
+          "note": "On feeder warning day neighbor took earliest slot to protect 21-22h peak"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "base_demand": [0.6, 1.0, 0.7, 0.5],
+      "preferred_slots": [0, 1],
+      "comfort_penalty": 0.12,
+      "persona": "Grid analyst who cares about transformer life",
+      "neighbor_examples": [
+        {
+          "neighbor_id": 1,
+          "base_demand": [1.1, 0.8, 0.7, 0.6],
+          "preferred_slots": [1, 3],
+          "action": 1,
+          "note": "Neighbor slides to 20-21h when price gap widens"
+        },
+        {
+          "neighbor_id": 3,
+          "base_demand": [0.7, 0.9, 0.8, 0.6],
+          "preferred_slots": [2],
+          "action": 2,
+          "note": "Central neighbor sticks to 21-22h unless carbon spikes"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "base_demand": [0.7, 0.9, 0.8, 0.6],
+      "preferred_slots": [2],
+      "comfort_penalty": 0.22,
+      "persona": "Night-shift nurse who values rest and reliability",
+      "neighbor_examples": [
+        {
+          "neighbor_id": 2,
+          "base_demand": [0.6, 1.0, 0.7, 0.5],
+          "preferred_slots": [0, 1],
+          "action": 1,
+          "note": "Upstream neighbor leans on 20-21h when feeder is loose"
+        },
+        {
+          "neighbor_id": 4,
+          "base_demand": [0.8, 0.7, 0.6, 0.9],
+          "preferred_slots": [3],
+          "action": 3,
+          "note": "Downstream neighbor absorbs late slot to dodge carbon"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "base_demand": [0.8, 0.7, 0.6, 0.9],
+      "preferred_slots": [3],
+      "comfort_penalty": 0.16,
+      "persona": "Retired couple monitoring comfort and bills",
+      "neighbor_examples": [
+        {
+          "neighbor_id": 3,
+          "base_demand": [0.7, 0.9, 0.8, 0.6],
+          "preferred_slots": [2],
+          "action": 2,
+          "note": "Central neighbor anchors on 21-22h to keep routine"
+        },
+        {
+          "neighbor_id": 5,
+          "base_demand": [0.5, 0.6, 0.7, 0.8],
+          "preferred_slots": [3],
+          "action": 3,
+          "note": "Downstream neighbor also favors final slot when peak warning issued"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "base_demand": [0.5, 0.6, 0.7, 0.8],
+      "preferred_slots": [3],
+      "comfort_penalty": 0.1,
+      "persona": "Student tenant juggling late classes",
+      "neighbor_examples": [
+        {
+          "neighbor_id": 4,
+          "base_demand": [0.8, 0.7, 0.6, 0.9],
+          "preferred_slots": [3],
+          "action": 3,
+          "note": "Upstream neighbor usually sits at 22-23h unless feeder alarms"
+        },
+        {
+          "neighbor_id": 4,
+          "base_demand": [0.8, 0.7, 0.6, 0.9],
+          "preferred_slots": [3],
+          "action": 2,
+          "note": "On price spike nights upstream shifts to 21-22h to dodge carbon"
+        }
+      ]
+    }
+  ],
+  "weights": {
+    "alpha": 40.0,
+    "beta": 0.5
+  }
+}

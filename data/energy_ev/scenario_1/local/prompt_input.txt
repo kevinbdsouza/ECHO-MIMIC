@@ -1,0 +1,69 @@
+ECHO Stage 2 (Imitation) — Carbon-aware EV charging
+===================================================
+
+You must infer a compact Python policy that imitates each household's baseline choice.
+Baseline objective: minimize personal bill + comfort penalty.
+For agent i choosing slot t:
+    cost_i(t) = price[t] + comfort_penalty_i if t ∉ preferred_i else price[t]
+
+Provided context
+---------------
+Scenario id: ev_peak_sharing_1
+Slots: 0: 19-20, 1: 20-21, 2: 21-22, 3: 22-23
+Tariffs: 0.28, 0.19, 0.26, 0.22
+Comfort penalties encoded per agent. Preferred slot indices are shown below.
+Neighbor exemplars demonstrate historical local decisions.
+
+Agent sheets
+------------
+Agent 1 (Budget-sensitive engineer with a solar-equipped townhouse)
+  Base demand: [1.1, 0.8, 0.7, 0.6]
+  Preferred slots: [1, 3]
+  Comfort penalty: 0.16
+  Neighbor ICL:
+    - Example with neighbor 2: slot 1 (Neighbor moved earlier to ride lower price despite mild carbon bump)
+    - Example with neighbor 2: slot 0 (On feeder warning day neighbor took earliest slot to protect 21-22h peak)
+
+Agent 2 (Grid analyst who cares about transformer life)
+  Base demand: [0.6, 1.0, 0.7, 0.5]
+  Preferred slots: [0, 1]
+  Comfort penalty: 0.12
+  Neighbor ICL:
+    - Example with neighbor 1: slot 1 (Neighbor slides to 20-21h when price gap widens)
+    - Example with neighbor 3: slot 2 (Central neighbor sticks to 21-22h unless carbon spikes)
+
+Agent 3 (Night-shift nurse who values rest and reliability)
+  Base demand: [0.7, 0.9, 0.8, 0.6]
+  Preferred slots: [2]
+  Comfort penalty: 0.22
+  Neighbor ICL:
+    - Example with neighbor 2: slot 1 (Upstream neighbor leans on 20-21h when feeder is loose)
+    - Example with neighbor 4: slot 3 (Downstream neighbor absorbs late slot to dodge carbon)
+
+Agent 4 (Retired couple monitoring comfort and bills)
+  Base demand: [0.8, 0.7, 0.6, 0.9]
+  Preferred slots: [3]
+  Comfort penalty: 0.16
+  Neighbor ICL:
+    - Example with neighbor 3: slot 2 (Central neighbor anchors on 21-22h to keep routine)
+    - Example with neighbor 5: slot 3 (Downstream neighbor also favors final slot when peak warning issued)
+
+Agent 5 (Student tenant juggling late classes)
+  Base demand: [0.5, 0.6, 0.7, 0.8]
+  Preferred slots: [3]
+  Comfort penalty: 0.1
+  Neighbor ICL:
+    - Example with neighbor 4: slot 3 (Upstream neighbor usually sits at 22-23h unless feeder alarms)
+    - Example with neighbor 4: slot 2 (On price spike nights upstream shifts to 21-22h to dodge carbon)
+
+Output specification
+--------------------
+Write a Python script that:
+1. Loads scenario.json from disk.
+2. Computes each agent's selected slot following your inferred heuristic.
+3. Writes a JSON file named local_policy_output.json with a list of slot indices in agent order.
+
+Scoring
+-------
+Fitness = imitation accuracy across five agents (exact match with local optimum set).
+
