@@ -4,168 +4,49 @@ from __future__ import annotations
 
 import argparse
 import json
-import random
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Sequence
 
-import google.generativeai as genai
-
-from echo_mimic.common import (
-    CommandOutputCapture,
-    build_model,
-    configure_genai,
-    ensure_rate_limiter,
-    extract_python_code,
-    make_code_validator,
-)
+from echo_mimic.common import build_model, configure_genai, ensure_rate_limiter
 from echo_mimic.config import Config
-from echo_mimic.rate_limiter import send_message_with_retry
 from echo_mimic.domains.energy_ev import (
+    build_stage_three_prompt,
     evaluate_global_agent_policy_script,
     load_scenario,
-    build_stage_three_prompt,
 )
 
-from energy_evo_strat import EvolutionaryStrategy
-
+from energy_policy_evolution import EnergyPolicyContext, EnergyPolicyEvolutionRunner
 
 cfg = Config()
 rate_limiter = ensure_rate_limiter(cfg)
 
-
-def _completion_text(completion: genai.types.GenerateContentResponse) -> str:
-    if hasattr(completion, "text") and completion.text:
-        return completion.text
-    parts: List[str] = []
-    for part in getattr(completion, "parts", []):
-        text = getattr(part, "text", "")
-        if text:
-            parts.append(text)
-    return "\n".join(parts)
+GLOBAL_GUIDELINES = (
+    "- Operate entirely within the agent directory described in the prompt.\n"
+    "- Load scenario.json to reason about feeder-wide trade-offs and neighbour states.\n"
+    "- Produce deterministic coordination logic that respects global objectives and fairness.\n"
+    "- Write the selected integer slot to global_policy_output.json via json.dump.\n"
+    "- Avoid randomness, network calls, or files outside the agent directory.\n"
+)
 
 
-def _json_dumps(payload: Dict[str, object]) -> str:
-    try:
-        return json.dumps(payload, indent=2, sort_keys=True)
-    except TypeError:
-        return str(payload)
-
-
-def init_models(model_name: str) -> Tuple[genai.GenerativeModel, genai.GenerativeModel]:
+def init_models(model_name: str) -> tuple:
     configure_genai()
-
     system_instructions = (
         "You are an expert in distributed energy coordination and Python. "
-        "Produce executable policy.py files that read the EV scenario, balance feeder loading, "
-        "and output a single slot recommendation in JSON. Return only Python source code."
+        "Return complete policy.py files that compute a single slot recommendation for the agent."
     )
-
     fix_instructions = (
         "You debug Python scripts used for EV coordination heuristics. "
-        "Given failing code and error traces, return a corrected policy.py that runs without issues."
+        "Given failing code and error traces, return a corrected policy.py."
     )
-
     heur_model = build_model(model_name, system_instructions, ensure_configured=False)
     fix_model = build_model(model_name, fix_instructions, ensure_configured=False)
     return heur_model, fix_model
 
 
-def _make_validator(workdir: Path, capture: CommandOutputCapture, fix_model: genai.GenerativeModel):
-    return make_code_validator(
-        workdir=workdir,
-        capture=capture,
-        fix_model=fix_model,
-        rate_limiter=rate_limiter,
-        default_script="policy.py",
-        default_attempts=2,
-    )
-
-
 def _ensure_prompt_file(path: Path, prompt: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(prompt, encoding="utf-8")
-
-
-def _generate_policy_code(
-    *,
-    base_prompt: str,
-    heur_model: genai.GenerativeModel,
-    validator,
-    retry: int = 3,
-) -> str:
-    prompt = (
-        base_prompt
-        + "\n\nRespond with the executable Python for policy.py that fulfils this brief. "
-        "Return only code—no explanations or markdown."
-    )
-
-    last_error: Exception | None = None
-    for _ in range(retry):
-        try:
-            session = heur_model.start_chat(history=[])
-            completion = send_message_with_retry(session, prompt, rate_limiter)
-            response_text = _completion_text(completion)
-            code = extract_python_code(response_text) or response_text
-            code = code.strip()
-            if not code:
-                raise ValueError("Gemini returned an empty response")
-            return validator(code, script_name="policy.py", max_attempts=2)
-        except Exception as exc:  # pragma: no cover - defensive
-            last_error = exc
-    raise RuntimeError(f"Failed to generate policy code: {last_error}")
-
-
-def _mutate_policy_code(
-    *,
-    base_prompt: str,
-    current_code: str,
-    evaluation_detail: Dict[str, object] | None,
-    heur_model: genai.GenerativeModel,
-    validator,
-    rng: random.Random,
-) -> str:
-    focus_hints = [
-        "reduce feeder overload even if comfort decreases",
-        "favour lower carbon slots when costs are tied",
-        "tighten reasoning about neighbour coordination",
-        "add guard rails for invalid JSON outputs",
-    ]
-    hint = rng.choice(focus_hints)
-    feedback = _json_dumps(evaluation_detail or {"note": "initial mutation"})
-
-    prompt = (
-        base_prompt
-        + "\n\nEvaluation feedback for the current script:\n"
-        + feedback
-        + "\n\nThe existing policy.py is:\n```python\n"
-        + current_code
-        + "\n```\n\nModify it to "
-        + hint
-        + ". Return the full updated policy.py source with no commentary."
-    )
-
-    session = heur_model.start_chat(history=[])
-    completion = send_message_with_retry(session, prompt, rate_limiter)
-    response_text = _completion_text(completion)
-    code = extract_python_code(response_text) or response_text
-    code = code.strip()
-    if not code:
-        raise RuntimeError("Mutation produced an empty response")
-    return validator(code, script_name="policy.py", max_attempts=2)
-
-
-def _load_population(population_dir: Path, limit: int) -> List[str]:
-    payloads: List[str] = []
-    for path in sorted(population_dir.glob("*.py"))[:limit]:
-        payloads.append(path.read_text(encoding="utf-8"))
-    return payloads
-
-
-def _write_population(population_dir: Path, codes: Sequence[str]) -> None:
-    population_dir.mkdir(parents=True, exist_ok=True)
-    for idx, code in enumerate(codes, start=1):
-        path = population_dir / f"candidate_{idx:02d}.py"
-        path.write_text(code, encoding="utf-8")
 
 
 def run(
@@ -174,6 +55,7 @@ def run(
     agent_id: int,
     population_size: int,
     generations: int,
+    inner_loop_size: int,
     seed: int,
     init: bool,
     model_name: str | None = None,
@@ -188,64 +70,48 @@ def run(
 
     agent_dir = scenario_dir / "global" / f"agent_{agent_id}"
     agent_dir.mkdir(parents=True, exist_ok=True)
-    population_dir = agent_dir / "population"
 
     prompt = build_stage_three_prompt(scenario, agent_id)
     _ensure_prompt_file(agent_dir / "prompt_input.txt", prompt)
 
-    capture = CommandOutputCapture()
     heur_model, fix_model = init_models(model_name or cfg.lm)
-    validator = _make_validator(agent_dir, capture, fix_model)
 
-    if init:
-        seeds: List[str] = []
-        for _ in range(population_size):
-            code = _generate_policy_code(
-                base_prompt=prompt,
-                heur_model=heur_model,
-                validator=validator,
-            )
-            seeds.append(code)
-        _write_population(population_dir, seeds)
-
-    initial_population = _load_population(population_dir, population_size)
-    if not initial_population:
-        raise RuntimeError("No initial population found. Run with --init to generate seeds.")
-
-    feedback_map: Dict[str, Dict[str, object]] = {}
-
-    def evaluate(code: str) -> Tuple[float, Dict[str, object]]:
-        score, detail = evaluate_global_agent_policy_script(
+    def evaluator(code: str) -> tuple[float, dict[str, object]]:
+        return evaluate_global_agent_policy_script(
             code,
             scenario=scenario,
             scenario_dir=agent_dir,
             agent_id=agent_id,
         )
-        feedback_map[code] = detail
-        return score, detail
 
-    def mutate(code: str, rng: random.Random) -> str:
-        return _mutate_policy_code(
-            base_prompt=prompt,
-            current_code=code,
-            evaluation_detail=feedback_map.get(code),
-            heur_model=heur_model,
-            validator=validator,
-            rng=rng,
-        )
-
-    strategy = EvolutionaryStrategy(
-        evaluate=evaluate,
-        mutate=mutate,
-        population_size=population_size,
-        seed=seed,
+    context = EnergyPolicyContext(
+        stage_name="global",
+        prompt=prompt,
+        guidelines=GLOBAL_GUIDELINES,
+        agent_dir=agent_dir,
+        evaluator=evaluator,
+        heur_model=heur_model,
+        fix_model=fix_model,
+        rate_limiter=rate_limiter,
     )
 
-    best, history = strategy.run(initial_population, generations)
+    runner = EnergyPolicyEvolutionRunner(context, seed=seed)
 
-    agent_dir.joinpath("best_policy.py").write_text(best.payload, encoding="utf-8")
+    if init:
+        runner.generate_initial_population(population_size, overwrite=True)
+
+    result = runner.run(
+        population_size=population_size,
+        generations=generations,
+        inner_loop_size=inner_loop_size,
+    )
+
+    best = result["best"]
+    history = result["history"]
+
+    agent_dir.joinpath("best_policy.py").write_text(best["code"], encoding="utf-8")
     agent_dir.joinpath("best_policy_detail.json").write_text(
-        json.dumps(best.detail, indent=2, sort_keys=True) + "\n",
+        json.dumps(best.get("detail", {}), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     agent_dir.joinpath("evo_history.json").write_text(
@@ -253,9 +119,7 @@ def run(
         encoding="utf-8",
     )
 
-    print(
-        f"Completed global evolution for agent {agent_id}: best score {best.score:.3f}"
-    )
+    print(f"Completed global evolution for agent {agent_id}: best score {best['score']:.3f}")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -267,8 +131,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Directory containing scenario.json and agent subfolders.",
     )
     parser.add_argument("--agent-id", type=int, required=True, help="Target agent id to optimise.")
-    parser.add_argument("--population-size", type=int, default=6, help="Population size for the ES loop.")
+    parser.add_argument("--population-size", type=int, default=8, help="Population size for the ES loop.")
     parser.add_argument("--generations", type=int, default=8, help="Number of generations to evolve.")
+    parser.add_argument(
+        "--inner-loop-size",
+        type=int,
+        default=16,
+        help="Number of offspring attempts per generation.",
+    )
     parser.add_argument("--seed", type=int, default=17, help="Random seed for reproducibility.")
     parser.add_argument(
         "--no-init",
@@ -289,6 +159,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         agent_id=args.agent_id,
         population_size=max(1, args.population_size),
         generations=max(0, args.generations),
+        inner_loop_size=max(1, args.inner_loop_size),
         seed=args.seed,
         init=not args.no_init,
         model_name=args.model,
@@ -297,4 +168,3 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-
