@@ -25,6 +25,26 @@ def _run_python_script(script_path: Path, workdir: Path) -> subprocess.Completed
     )
 
 
+def _coerce_schedule(payload: Sequence[object], *, num_days: int) -> List[int]:
+    if not isinstance(payload, Sequence) or isinstance(payload, (str, bytes)):
+        raise ValueError("Schedule must be a sequence of day-level slots")
+    if len(payload) != num_days:
+        raise ValueError("Schedule length must match number of days")
+    try:
+        return [int(value) for value in payload]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Non-integer slot detected: {payload}") from exc
+
+
+def _transpose_agent_schedules(
+    schedules: Sequence[Sequence[int]], *, num_days: int
+) -> List[List[int]]:
+    return [
+        [schedule[day_idx] for schedule in schedules]
+        for day_idx in range(num_days)
+    ]
+
+
 def evaluate_local_policy_script(
     code: str,
     *,
@@ -56,22 +76,31 @@ def evaluate_local_policy_script(
 
     local_optima = enumerate_local_optima(scenario)
     correct = 0
-    per_agent = {}
-    for idx, choice in enumerate(allocation, start=1):
+    total = scenario.num_agents * scenario.num_days
+    per_agent: Dict[str, object] = {}
+    for idx, schedule in enumerate(allocation, start=1):
         try:
-            choice_int = int(choice)
-        except (ValueError, TypeError):
-            return 0.0, {"status": "non_integer", "agent": idx, "value": choice}
+            schedule_int = _coerce_schedule(schedule, num_days=scenario.num_days)
+        except ValueError as exc:
+            return 0.0, {"status": "invalid_schedule", "agent": idx, "error": str(exc)}
         best_slots = local_optima[idx]
-        per_agent[str(idx)] = {
-            "choice": choice_int,
-            "best": best_slots,
-            "match": choice_int in best_slots,
-        }
-        if choice_int in best_slots:
-            correct += 1
+        day_details = []
+        for day_idx, slot in enumerate(schedule_int):
+            best_for_day = best_slots[day_idx]
+            match = slot in best_for_day
+            if match:
+                correct += 1
+            day_details.append(
+                {
+                    "day": day_idx + 1,
+                    "slot": slot,
+                    "best": best_for_day,
+                    "match": match,
+                }
+            )
+        per_agent[str(idx)] = day_details
 
-    accuracy = correct / scenario.num_agents
+    accuracy = correct / total if total else 0.0
     return accuracy, {
         "status": "ok",
         "accuracy": accuracy,
@@ -108,17 +137,21 @@ def evaluate_global_policy_script(
     if not isinstance(allocation, Sequence) or len(allocation) != scenario.num_agents:
         return float("-inf"), {"status": "invalid_shape", "output": allocation}
 
-    try:
-        allocation_int = [int(slot) for slot in allocation]
-    except (ValueError, TypeError):
-        return float("-inf"), {"status": "non_integer", "output": allocation}
+    schedules: List[List[int]] = []
+    for idx, schedule in enumerate(allocation, start=1):
+        try:
+            schedule_int = _coerce_schedule(schedule, num_days=scenario.num_days)
+        except ValueError as exc:
+            return float("-inf"), {"status": "invalid_schedule", "agent": idx, "error": str(exc)}
+        schedules.append(schedule_int)
 
-    global_cost = compute_global_cost(scenario, allocation_int)
+    daily_allocation = _transpose_agent_schedules(schedules, num_days=scenario.num_days)
+    global_cost = compute_global_cost(scenario, daily_allocation)
     best_allocation, best_score = enumerate_global_optimum(scenario)
 
     return -global_cost, {
         "status": "ok",
-        "allocation": allocation_int,
+        "allocation": schedules,
         "global_cost": global_cost,
         "best_score": best_score,
         "regret": global_cost - best_score,
@@ -130,7 +163,7 @@ def evaluate_nudge_response(
     message: str,
     *,
     scenario: EVScenario,
-    recommended_allocation: Sequence[int],
+    recommended_allocation: Sequence[Sequence[int]],
 ) -> Tuple[float, Dict[str, object]]:
     """Validate a JSON nudge response and check recommended slot alignment."""
 
@@ -139,14 +172,14 @@ def evaluate_nudge_response(
     except json.JSONDecodeError as exc:
         return 0.0, {"status": "invalid_json", "error": str(exc)}
 
-    required_keys = {"persona", "recommended_slot", "message"}
+    required_keys = {"persona", "recommended_slots", "message"}
     if not required_keys.issubset(payload):
         return 0.0, {"status": "missing_keys", "payload": payload}
 
     try:
-        recommended_slot = int(payload["recommended_slot"])
-    except (ValueError, TypeError):
-        return 0.0, {"status": "bad_slot", "value": payload["recommended_slot"]}
+        recommended_slots = _coerce_schedule(payload["recommended_slots"], num_days=scenario.num_days)
+    except (ValueError, TypeError, KeyError) as exc:
+        return 0.0, {"status": "bad_slots", "error": str(exc)}
 
     persona = str(payload["persona"])
     text = str(payload["message"])
@@ -156,15 +189,15 @@ def evaluate_nudge_response(
         return 0.0, {"status": "unknown_persona", "persona": persona}
 
     agent_index = agent_map[persona]
-    target_slot = int(recommended_allocation[agent_index])
-
-    score = 1.0 if recommended_slot == target_slot else 0.0
+    target_schedule = [int(day[agent_index]) for day in recommended_allocation]
+    matches = [slot == target for slot, target in zip(recommended_slots, target_schedule)]
+    score = sum(matches) / scenario.num_days if scenario.num_days else 0.0
     detail = {
-        "status": "ok" if score > 0 else "mismatch",
+        "status": "ok" if score >= 1.0 else "partial",
         "persona": persona,
         "agent_index": agent_index + 1,
-        "recommended_slot": recommended_slot,
-        "target_slot": target_slot,
+        "recommended_slots": recommended_slots,
+        "target_slots": target_schedule,
         "message": text,
     }
     return score, detail
@@ -200,21 +233,23 @@ def evaluate_local_agent_policy_script(
             return 0.0, {"status": "invalid_json", "error": str(exc)}
 
     try:
-        choice = int(payload)
-    except (TypeError, ValueError):
-        return 0.0, {"status": "non_integer", "output": payload}
+        schedule = _coerce_schedule(payload, num_days=scenario.num_days)
+    except ValueError as exc:
+        return 0.0, {"status": "invalid_schedule", "error": str(exc)}
 
     local_optima = enumerate_local_optima(scenario)
     best_slots = local_optima.get(agent_id)
     if best_slots is None:
         return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
 
-    score = 1.0 if choice in best_slots else 0.0
+    matches = [slot in best_slots[day_idx] for day_idx, slot in enumerate(schedule)]
+    score = sum(matches) / scenario.num_days if scenario.num_days else 0.0
     detail = {
-        "status": "ok" if score > 0 else "mismatch",
+        "status": "ok" if score >= 1.0 else "partial",
         "agent_id": agent_id,
-        "choice": choice,
+        "schedule": schedule,
         "best": best_slots,
+        "matches": matches,
     }
     return score, detail
 
@@ -249,21 +284,23 @@ def evaluate_global_agent_policy_script(
             return 0.0, {"status": "invalid_json", "error": str(exc)}
 
     try:
-        choice = int(payload)
-    except (TypeError, ValueError):
-        return 0.0, {"status": "non_integer", "output": payload}
+        schedule = _coerce_schedule(payload, num_days=scenario.num_days)
+    except ValueError as exc:
+        return 0.0, {"status": "invalid_schedule", "error": str(exc)}
 
     best_allocation, best_score = enumerate_global_optimum(scenario)
-    if agent_id < 1 or agent_id > len(best_allocation):
+    if agent_id < 1 or agent_id > len(scenario.agents):
         return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
 
-    target = int(best_allocation[agent_id - 1])
-    score = 1.0 if choice == target else 0.0
+    target_schedule = [int(day[agent_id - 1]) for day in best_allocation]
+    matches = [slot == target for slot, target in zip(schedule, target_schedule)]
+    score = sum(matches) / scenario.num_days if scenario.num_days else 0.0
     detail = {
-        "status": "ok" if score > 0 else "mismatch",
+        "status": "ok" if score >= 1.0 else "partial",
         "agent_id": agent_id,
-        "choice": choice,
-        "target": target,
+        "schedule": schedule,
+        "target": target_schedule,
+        "matches": matches,
         "objective": best_score,
     }
     return score, detail
@@ -282,14 +319,14 @@ def evaluate_agent_nudge_response(
     except json.JSONDecodeError as exc:
         return 0.0, {"status": "invalid_json", "error": str(exc)}
 
-    required_keys = {"persona", "recommended_slot", "message"}
+    required_keys = {"persona", "recommended_slots", "message"}
     if not required_keys.issubset(payload):
         return 0.0, {"status": "missing_keys", "payload": payload}
 
     try:
-        recommended_slot = int(payload["recommended_slot"])
-    except (TypeError, ValueError):
-        return 0.0, {"status": "bad_slot", "value": payload["recommended_slot"]}
+        recommended_slots = _coerce_schedule(payload["recommended_slots"], num_days=scenario.num_days)
+    except (TypeError, ValueError, KeyError) as exc:
+        return 0.0, {"status": "bad_slots", "error": str(exc)}
 
     persona = str(payload["persona"])
     text = str(payload["message"])
@@ -302,15 +339,16 @@ def evaluate_agent_nudge_response(
         return 0.0, {"status": "persona_mismatch", "expected": agent.persona, "received": persona}
 
     best_allocation, _ = enumerate_global_optimum(scenario)
-    target_slot = int(best_allocation[agent_id - 1])
-
-    score = 1.0 if recommended_slot == target_slot else 0.0
+    target_slots = [int(day[agent_id - 1]) for day in best_allocation]
+    matches = [slot == target for slot, target in zip(recommended_slots, target_slots)]
+    score = sum(matches) / scenario.num_days if scenario.num_days else 0.0
     detail = {
-        "status": "ok" if score > 0 else "mismatch",
+        "status": "ok" if score >= 1.0 else "partial",
         "agent_id": agent_id,
         "persona": persona,
-        "recommended_slot": recommended_slot,
-        "target_slot": target_slot,
+        "recommended_slots": recommended_slots,
+        "target_slots": target_slots,
+        "matches": matches,
         "message": text,
     }
     return score, detail

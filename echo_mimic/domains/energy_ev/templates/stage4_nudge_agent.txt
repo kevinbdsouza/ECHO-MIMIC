@@ -19,7 +19,7 @@ Global coordination code:
 
 Task
 ----
-Create a JSON object with keys ``persona``, ``recommended_slot``, and ``message`` that nudges this persona
+Create a JSON object with keys ``persona``, ``recommended_slots`` (seven daily indices), and ``message`` that nudges this persona
 from their local behaviour towards the coordinated recommendation implied by the global heuristic above.
 Ground your message entirely on what you can infer from the two policy snippets and the limited neighbour context.
 

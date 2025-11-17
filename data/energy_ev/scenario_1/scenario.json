@@ -1,11 +1,62 @@
 {
   "scenario_id": "ev_peak_sharing_1",
-  "description": "Five prosumer households schedule single EV charge across four hourly slots with shared feeder constraints and carbon intensity.",
+  "description": "Five prosumer households schedule single EV charge across four hourly slots with shared feeder constraints and carbon intensity over a rolling seven-day horizon.",
   "slots": ["19-20", "20-21", "21-22", "22-23"],
   "capacity": 7.0,
   "baseline_load": [5.2, 5.6, 5.0, 6.7],
   "price": [0.28, 0.19, 0.26, 0.22],
   "carbon_intensity": [560, 500, 520, 420],
+  "days": [
+    {
+      "name": "Day 1",
+      "note": "Clear skies, typical spring demand",
+      "baseline_load": [5.2, 5.6, 5.0, 6.7],
+      "price": [0.28, 0.19, 0.26, 0.22],
+      "carbon_intensity": [560, 500, 520, 420]
+    },
+    {
+      "name": "Day 2",
+      "note": "Slightly cooler evening",
+      "baseline_load": [5.4, 5.8, 5.1, 6.5],
+      "price": [0.27, 0.20, 0.25, 0.23],
+      "carbon_intensity": [540, 480, 510, 430]
+    },
+    {
+      "name": "Day 3",
+      "note": "Clouds reduce rooftop solar backfeed",
+      "baseline_load": [5.7, 6.1, 5.4, 6.8],
+      "price": [0.30, 0.21, 0.26, 0.24],
+      "carbon_intensity": [580, 520, 500, 410]
+    },
+    {
+      "name": "Day 4",
+      "note": "Weekend load shift",
+      "baseline_load": [5.1, 5.5, 5.2, 6.4],
+      "price": [0.26, 0.18, 0.24, 0.21],
+      "carbon_intensity": [530, 470, 490, 400]
+    },
+    {
+      "name": "Day 5",
+      "note": "Local event spikes mid-evening demand",
+      "baseline_load": [5.3, 5.7, 5.3, 6.6],
+      "price": [0.29, 0.19, 0.25, 0.23],
+      "carbon_intensity": [550, 490, 500, 405]
+    },
+    {
+      "name": "Day 6",
+      "note": "Transformer maintenance advisory",
+      "baseline_load": [5.6, 5.9, 5.2, 6.9],
+      "price": [0.31, 0.22, 0.27, 0.25],
+      "carbon_intensity": [600, 540, 520, 415]
+    },
+    {
+      "name": "Day 7",
+      "note": "Cool front lowers late-night load",
+      "baseline_load": [5.0, 5.4, 5.1, 6.3],
+      "price": [0.25, 0.18, 0.23, 0.20],
+      "carbon_intensity": [520, 460, 480, 390]
+    }
+  ],
   "agents": [
     {
       "id": 1,

@@ -1,9 +1,37 @@
 {
   "agent_id": 3,
   "persona": "Night-shift nurse who values rest and reliability",
-  "recommended_slot": 1,
-  "local_best_slots": [
-    2
+  "recommended_slots": [
+    1,
+    1,
+    3,
+    1,
+    3,
+    3,
+    1
+  ],
+  "local_best_slots_by_day": [
+    [
+      2
+    ],
+    [
+      2
+    ],
+    [
+      2
+    ],
+    [
+      2
+    ],
+    [
+      2
+    ],
+    [
+      2
+    ],
+    [
+      2
+    ]
   ],
   "notes": "Nudge messages should reconcile the agent's imitation heuristic with the coordinated recommendation."
 }

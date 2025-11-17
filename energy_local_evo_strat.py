@@ -24,7 +24,7 @@ LOCAL_GUIDELINES = (
     "- Run entirely within the agent directory provided in the prompt.\n"
     "- Load scenario.json relative to the working directory to inspect neighbour exemplars.\n"
     "- Implement deterministic reasoning using comfort windows, feeder stress, and price cues.\n"
-    "- Write the chosen integer slot to local_policy_output.json via json.dump.\n"
+    "- Emit a 7-element list of slot indices (one per day) to local_policy_output.json via json.dump.\n"
     "- Do not read or write files outside the agent directory and avoid randomness.\n"
 )
 
@@ -33,7 +33,7 @@ def init_models(model_name: str) -> tuple:
     configure_genai()
     system_instructions = (
         "You are an expert energy systems engineer and Python developer. "
-        "Produce concise, fully runnable policy.py files that reason over the scenario context and output a single slot."
+        "Produce concise, fully runnable policy.py files that reason over the scenario context and output a 7-day slot plan."
     )
     fix_instructions = (
         "You repair Python scripts for EV charging heuristics. Given failing code and stderr, return a corrected policy.py."

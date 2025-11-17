@@ -1,11 +1,55 @@
 {
   "allocation": [
-    1,
-    1,
-    1,
-    3,
-    3
+    [
+      1,
+      1,
+      1,
+      3,
+      3
+    ],
+    [
+      1,
+      1,
+      1,
+      3,
+      3
+    ],
+    [
+      3,
+      3,
+      3,
+      3,
+      3
+    ],
+    [
+      1,
+      1,
+      1,
+      3,
+      3
+    ],
+    [
+      3,
+      3,
+      3,
+      3,
+      3
+    ],
+    [
+      3,
+      3,
+      3,
+      3,
+      3
+    ],
+    [
+      1,
+      1,
+      1,
+      3,
+      3
+    ]
   ],
-  "objective": 1238.0,
+  "objective": 8408.0,
   "notes": "Derived from brute-force enumeration of the global objective for scenario ev_peak_sharing_1."
 }

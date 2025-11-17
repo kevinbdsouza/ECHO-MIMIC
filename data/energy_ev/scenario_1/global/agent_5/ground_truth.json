@@ -1,6 +1,14 @@
 {
   "agent_id": 5,
   "persona": "Student tenant juggling late classes",
-  "recommended_slot": 3,
-  "objective": 1238.0
+  "recommended_slots": [
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3
+  ],
+  "objective": 8408.0
 }

@@ -7,6 +7,35 @@ Retail tariff ($/kWh): 0.28, 0.19, 0.26, 0.22
 Grid carbon intensity (gCO2/kWh): 560, 500, 520, 420
 Feeder capacity (kW equivalent): 7.0
 Baseline non-EV load (kW): 5.2, 5.6, 5.0, 6.7
+7-day feeder outlook:
+  Day 1 (Day 1 — Clear skies, typical spring demand)
+    Tariff: 0.28, 0.19, 0.26, 0.22
+    Carbon: 560, 500, 520, 420
+    Baseline load: 5.2, 5.6, 5.0, 6.7
+  Day 2 (Day 2 — Slightly cooler evening)
+    Tariff: 0.27, 0.20, 0.25, 0.23
+    Carbon: 540, 480, 510, 430
+    Baseline load: 5.4, 5.8, 5.1, 6.5
+  Day 3 (Day 3 — Clouds reduce rooftop solar backfeed)
+    Tariff: 0.30, 0.21, 0.26, 0.24
+    Carbon: 580, 520, 500, 410
+    Baseline load: 5.7, 6.1, 5.4, 6.8
+  Day 4 (Day 4 — Weekend load shift)
+    Tariff: 0.26, 0.18, 0.24, 0.21
+    Carbon: 530, 470, 490, 400
+    Baseline load: 5.1, 5.5, 5.2, 6.4
+  Day 5 (Day 5 — Local event spikes mid-evening demand)
+    Tariff: 0.29, 0.19, 0.25, 0.23
+    Carbon: 550, 490, 500, 405
+    Baseline load: 5.3, 5.7, 5.3, 6.6
+  Day 6 (Day 6 — Transformer maintenance advisory)
+    Tariff: 0.31, 0.22, 0.27, 0.25
+    Carbon: 600, 540, 520, 415
+    Baseline load: 5.6, 5.9, 5.2, 6.9
+  Day 7 (Day 7 — Cool front lowers late-night load)
+    Tariff: 0.25, 0.18, 0.23, 0.20
+    Carbon: 520, 460, 480, 390
+    Baseline load: 5.0, 5.4, 5.1, 6.3
 
 Your profile
 ------------
@@ -24,12 +53,15 @@ Task
 ----
 Write a Python script that:
 1. Loads ``scenario.json`` using only filesystem context that would be available to this agent.
-2. Chooses the slot that best matches the imitation-stage objective described in the agent sheet.
-3. Writes ``local_policy_output.json`` containing the chosen slot index for this agent only.
+2. Chooses the slot that best matches the imitation-stage objective for each of the next seven days.
+3. Writes ``local_policy_output.json`` containing a list of seven slot indices (one per day) for this agent only.
+4. Saves the implementation in a file called ``policy.py`` so that running ``python policy.py`` from this directory regenerates ``local_policy_output.json``.
 
 Constraints
 -----------
 • Use only the information in this prompt. Other agents' private data must remain hidden.
-• Preserve the JSON output format and keep the payload to a single integer value.
+• Preserve the JSON output format and keep the payload to a list of seven integers.
 • Do not attempt to coordinate with non-neighbour agents at this stage.
+• ``scenario.json`` resides two directories up (``../../scenario.json``) from this agent folder—derive paths programmatically.
+• Respond with only valid Python code representing the full contents of ``policy.py``; do not include commentary or markdown fences.
 

@@ -11,6 +11,8 @@ Provided context
 Scenario id: {scenario_id}
 Slots: {slots}
 Tariffs: {price}
+7-day feeder outlook:
+{daily_conditions}
 Comfort penalties encoded per agent. Preferred slot indices are shown below.
 Neighbor exemplars demonstrate historical local decisions.
 
@@ -22,9 +24,9 @@ Output specification
 --------------------
 Write a Python script that:
 1. Loads scenario.json from disk.
-2. Computes each agent's selected slot following your inferred heuristic.
-3. Writes a JSON file named local_policy_output.json with a list of slot indices in agent order.
+2. Computes each agent's selected slot for every day in the 7-day horizon following your inferred heuristic.
+3. Writes a JSON file named local_policy_output.json with one 7-element list per agent (agent-major order).
 
 Scoring
 -------
-Fitness = imitation accuracy across five agents (exact match with local optimum set).
+Fitness = imitation accuracy across five agents and seven days (per-day exact match with the local optimum set).

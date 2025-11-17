@@ -1,7 +1,27 @@
 {
   "agent_id": 2,
   "persona": "Grid analyst who cares about transformer life",
-  "best_slots": [
-    1
+  "best_slots_by_day": [
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ]
   ]
 }

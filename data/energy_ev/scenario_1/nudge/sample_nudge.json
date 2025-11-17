@@ -1,5 +1,5 @@
 {
   "persona": "Budget-sensitive engineer with a solar-equipped townhouse",
-  "recommended_slot": 1,
-  "message": "Hey Anika, if you glide your EV session to 20-21h tonight we keep the feeder under its 7 kW limit and avoid the $0.04 carbon surcharge. Your rooftop solar still covers the daytime load, and the feeder stays cool so the utility skips the transformer maintenance fee everyone would share."
+  "recommended_slots": [1, 1, 3, 1, 3, 3, 1],
+  "message": "Anika, nudging your EV session to 20-21h on the calm tariff days (1-2,4,7) and 22-23h on the heavier feeder days (3,5-6) keeps the transformer below the 7 kW alert and trims ~$6 off the weekly bill while shaving 12 kg CO2."
 }

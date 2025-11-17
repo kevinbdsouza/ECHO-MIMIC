@@ -14,4 +14,4 @@ Expectations
 • Keep the message under 120 words and grounded in energy/carbon reasoning.
 • Reference concrete benefits (bill savings, transformer safety, carbon avoidance).
 • Be consistent with neighbor evidence when explaining the recommended move.
-• Output JSON with keys: persona, recommended_slot, message.
+• Output JSON with keys: persona, recommended_slots (7 integers), message.

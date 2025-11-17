@@ -1,7 +1,27 @@
 {
   "agent_id": 1,
   "persona": "Budget-sensitive engineer with a solar-equipped townhouse",
-  "best_slots": [
-    1
+  "best_slots_by_day": [
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ]
   ]
 }
