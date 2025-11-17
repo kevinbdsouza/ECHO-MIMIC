@@ -6,6 +6,35 @@ Slots (index → hour): 0: 19-20, 1: 20-21, 2: 21-22, 3: 22-23
 Feeder capacity: 7.0
 Baseline load: 5.2, 5.6, 5.0, 6.7
 Carbon intensity: 560, 500, 520, 420
+7-day feeder outlook:
+  Day 1 (Day 1 — Clear skies, typical spring demand)
+    Tariff: 0.28, 0.19, 0.26, 0.22
+    Carbon: 560, 500, 520, 420
+    Baseline load: 5.2, 5.6, 5.0, 6.7
+  Day 2 (Day 2 — Slightly cooler evening)
+    Tariff: 0.27, 0.20, 0.25, 0.23
+    Carbon: 540, 480, 510, 430
+    Baseline load: 5.4, 5.8, 5.1, 6.5
+  Day 3 (Day 3 — Clouds reduce rooftop solar backfeed)
+    Tariff: 0.30, 0.21, 0.26, 0.24
+    Carbon: 580, 520, 500, 410
+    Baseline load: 5.7, 6.1, 5.4, 6.8
+  Day 4 (Day 4 — Weekend load shift)
+    Tariff: 0.26, 0.18, 0.24, 0.21
+    Carbon: 530, 470, 490, 400
+    Baseline load: 5.1, 5.5, 5.2, 6.4
+  Day 5 (Day 5 — Local event spikes mid-evening demand)
+    Tariff: 0.29, 0.19, 0.25, 0.23
+    Carbon: 550, 490, 500, 405
+    Baseline load: 5.3, 5.7, 5.3, 6.6
+  Day 6 (Day 6 — Transformer maintenance advisory)
+    Tariff: 0.31, 0.22, 0.27, 0.25
+    Carbon: 600, 540, 520, 415
+    Baseline load: 5.6, 5.9, 5.2, 6.9
+  Day 7 (Day 7 — Cool front lowers late-night load)
+    Tariff: 0.25, 0.18, 0.23, 0.20
+    Carbon: 520, 460, 480, 390
+    Baseline load: 5.0, 5.4, 5.1, 6.3
 Weights: α=40.00, β=0.50
 
 Your profile
@@ -22,19 +51,22 @@ Neighbour observations
 
 Goal
 ----
-Design Python heuristics that choose a slot for this agent which helps minimise the global score:
+Design Python heuristics that choose a slot for this agent on each of the next seven days to help minimise the global score:
     score(a) = α * max_t max(0, baseline[t] + EV_count[t] − capacity) + β * carbon_term(a)
 while respecting the fact that you can only observe the neighbours listed above.
 
 Output specification
 --------------------
 1. Load ``scenario.json`` using only paths visible from the agent directory.
-2. Decide on a slot recommendation for this agent that balances local comfort with global coordination.
-3. Write ``global_policy_output.json`` containing just this agent's recommended slot index.
+2. Decide on a slot recommendation for this agent for each day that balances local comfort with global coordination.
+3. Write ``global_policy_output.json`` containing a list of seven slot indices for this agent.
+4. Save the executable script as ``policy.py`` so ``python policy.py`` recreates ``global_policy_output.json`` inside this folder.
 
 Keep reasoning local
 --------------------
 • Do not assume knowledge of non-neighbour households.
 • Explainable heuristics that can be combined with other agents will be favoured downstream.
 • Your output will be compared against the globally optimal allocation for this agent.
+• ``scenario.json`` is available at ``../../scenario.json`` relative to this directory—resolve it programmatically.
+• Return only the Python source of ``policy.py``; omit explanations, markdown, or additional text.
 

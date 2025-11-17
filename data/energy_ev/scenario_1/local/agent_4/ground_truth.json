@@ -1,7 +1,27 @@
 {
   "agent_id": 4,
   "persona": "Retired couple monitoring comfort and bills",
-  "best_slots": [
-    3
+  "best_slots_by_day": [
+    [
+      3
+    ],
+    [
+      3
+    ],
+    [
+      3
+    ],
+    [
+      3
+    ],
+    [
+      3
+    ],
+    [
+      3
+    ],
+    [
+      3
+    ]
   ]
 }

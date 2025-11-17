@@ -1,7 +1,27 @@
 {
   "agent_id": 5,
   "persona": "Student tenant juggling late classes",
-  "best_slots": [
-    3
+  "best_slots_by_day": [
+    [
+      3
+    ],
+    [
+      3
+    ],
+    [
+      3
+    ],
+    [
+      3
+    ],
+    [
+      3
+    ],
+    [
+      3
+    ],
+    [
+      3
+    ]
   ]
 }

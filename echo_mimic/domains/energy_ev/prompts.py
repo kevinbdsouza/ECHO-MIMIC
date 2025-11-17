@@ -101,6 +101,7 @@ def _stage_one_context(scenario: EVScenario) -> Dict[str, str]:
         "alpha": f"{scenario.alpha:.2f}",
         "beta": f"{scenario.beta:.2f}",
         "agents": "\n\n".join(agent_lines),
+        "daily_conditions": _daily_conditions_block(scenario),
     }
 
 
@@ -116,6 +117,7 @@ def _shared_context(scenario: EVScenario) -> Dict[str, str]:
         "capacity": f"{scenario.capacity:.1f}",
         "alpha": f"{scenario.alpha:.2f}",
         "beta": f"{scenario.beta:.2f}",
+        "daily_conditions": _daily_conditions_block(scenario),
     }
 
 
@@ -173,3 +175,25 @@ def _read_policy_snippet(directory: Path, candidates: tuple[str, ...], *, fallba
         if path.exists():
             return path.read_text(encoding="utf-8")
     return fallback
+
+
+def _daily_conditions_block(scenario: EVScenario) -> str:
+    lines = []
+    for idx, day in enumerate(scenario.daily_profiles, start=1):
+        note = f" — {day.note}" if day.note else ""
+        lines.append(
+            "\n".join(
+                [
+                    f"  Day {idx} ({day.name}{note})",
+                    "    Tariff: "
+                    + ", ".join(f"{value:.2f}" for value in day.price),
+                    "    Carbon: "
+                    + ", ".join(f"{value:.0f}" for value in day.carbon_intensity),
+                    "    Baseline load: "
+                    + ", ".join(f"{value:.1f}" for value in day.baseline_load),
+                ]
+            )
+        )
+    if not lines:
+        return "  No multi-day context provided"
+    return "\n".join(lines)

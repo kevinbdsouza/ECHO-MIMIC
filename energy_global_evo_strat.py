@@ -24,7 +24,7 @@ GLOBAL_GUIDELINES = (
     "- Operate entirely within the agent directory described in the prompt.\n"
     "- Load scenario.json to reason about feeder-wide trade-offs and neighbour states.\n"
     "- Produce deterministic coordination logic that respects global objectives and fairness.\n"
-    "- Write the selected integer slot to global_policy_output.json via json.dump.\n"
+    "- Write the 7-day slot plan (list of indices) to global_policy_output.json via json.dump.\n"
     "- Avoid randomness, network calls, or files outside the agent directory.\n"
 )
 
@@ -33,7 +33,7 @@ def init_models(model_name: str) -> tuple:
     configure_genai()
     system_instructions = (
         "You are an expert in distributed energy coordination and Python. "
-        "Return complete policy.py files that compute a single slot recommendation for the agent."
+        "Return complete policy.py files that compute a 7-day slot recommendation for the agent."
     )
     fix_instructions = (
         "You debug Python scripts used for EV coordination heuristics. "

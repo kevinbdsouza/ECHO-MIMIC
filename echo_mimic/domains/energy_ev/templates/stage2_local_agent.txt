@@ -7,6 +7,8 @@ Retail tariff ($/kWh): {price}
 Grid carbon intensity (gCO2/kWh): {carbon}
 Feeder capacity (kW equivalent): {capacity}
 Baseline non-EV load (kW): {baseline}
+7-day feeder outlook:
+{daily_conditions}
 
 Your profile
 ------------
@@ -23,14 +25,14 @@ Task
 ----
 Write a Python script that:
 1. Loads ``scenario.json`` using only filesystem context that would be available to this agent.
-2. Chooses the slot that best matches the imitation-stage objective described in the agent sheet.
-3. Writes ``local_policy_output.json`` containing the chosen slot index for this agent only.
+2. Chooses the slot that best matches the imitation-stage objective for each of the next seven days.
+3. Writes ``local_policy_output.json`` containing a list of seven slot indices (one per day) for this agent only.
 4. Saves the implementation in a file called ``policy.py`` so that running ``python policy.py`` from this directory regenerates ``local_policy_output.json``.
 
 Constraints
 -----------
 • Use only the information in this prompt. Other agents' private data must remain hidden.
-• Preserve the JSON output format and keep the payload to a single integer value.
+• Preserve the JSON output format and keep the payload to a list of seven integers.
 • Do not attempt to coordinate with non-neighbour agents at this stage.
 • ``scenario.json`` resides two directories up (``../../scenario.json``) from this agent folder—derive paths programmatically.
 • Respond with only valid Python code representing the full contents of ``policy.py``; do not include commentary or markdown fences.

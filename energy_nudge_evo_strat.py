@@ -29,9 +29,9 @@ cfg = Config()
 rate_limiter = ensure_rate_limiter(cfg)
 
 MESSAGE_GUIDELINES = (
-    "- Respond with valid JSON containing persona, recommended_slot, and message keys.\n"
+    "- Respond with valid JSON containing persona, recommended_slots, and message keys.\n"
     "- The persona must match the agent profile in the prompt.\n"
-    "- recommended_slot must be an integer represented without quotes.\n"
+    "- recommended_slots must be a 7-element integer list covering consecutive days.\n"
     "- Keep the message concise, factual, and aligned with feeder and comfort constraints.\n"
 )
 
@@ -44,7 +44,7 @@ def init_model(model_name: str) -> genai.GenerativeModel:
     configure_genai()
     system_instructions = (
         "You craft persuasive yet respectful energy-behaviour nudges. "
-        "Given persona context and policy code, output a JSON object with keys persona, recommended_slot, and message."
+        "Given persona context and policy code, output JSON with persona, recommended_slots (7 integers), and message."
     )
     return build_model(model_name, system_instructions, ensure_configured=False)
 

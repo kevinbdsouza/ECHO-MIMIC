@@ -1,6 +1,14 @@
 {
   "agent_id": 4,
   "persona": "Retired couple monitoring comfort and bills",
-  "recommended_slot": 3,
-  "objective": 1238.0
+  "recommended_slots": [
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3
+  ],
+  "objective": 8408.0
 }

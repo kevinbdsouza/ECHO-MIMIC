@@ -1,7 +1,7 @@
 Carbon-aware EV charging scenario: ev_peak_sharing_1
 
 Storyworld summary:
-Five prosumer households schedule single EV charge across four hourly slots with shared feeder constraints and carbon intensity.
+Five prosumer households schedule single EV charge across four hourly slots with shared feeder constraints and carbon intensity over a rolling seven-day horizon.
 
 Shared parameters
 -----------------
@@ -10,6 +10,35 @@ Feeder capacity (kW equivalent): 7.0
 Baseline non-EV load (kW): 5.2, 5.6, 5.0, 6.7
 Retail tariff ($/kWh): 0.28, 0.19, 0.26, 0.22
 Grid carbon intensity (gCO2/kWh): 560, 500, 520, 420
+Seven-day feeder outlook:
+  Day 1 (Day 1 — Clear skies, typical spring demand)
+    Tariff: 0.28, 0.19, 0.26, 0.22
+    Carbon: 560, 500, 520, 420
+    Baseline load: 5.2, 5.6, 5.0, 6.7
+  Day 2 (Day 2 — Slightly cooler evening)
+    Tariff: 0.27, 0.20, 0.25, 0.23
+    Carbon: 540, 480, 510, 430
+    Baseline load: 5.4, 5.8, 5.1, 6.5
+  Day 3 (Day 3 — Clouds reduce rooftop solar backfeed)
+    Tariff: 0.30, 0.21, 0.26, 0.24
+    Carbon: 580, 520, 500, 410
+    Baseline load: 5.7, 6.1, 5.4, 6.8
+  Day 4 (Day 4 — Weekend load shift)
+    Tariff: 0.26, 0.18, 0.24, 0.21
+    Carbon: 530, 470, 490, 400
+    Baseline load: 5.1, 5.5, 5.2, 6.4
+  Day 5 (Day 5 — Local event spikes mid-evening demand)
+    Tariff: 0.29, 0.19, 0.25, 0.23
+    Carbon: 550, 490, 500, 405
+    Baseline load: 5.3, 5.7, 5.3, 6.6
+  Day 6 (Day 6 — Transformer maintenance advisory)
+    Tariff: 0.31, 0.22, 0.27, 0.25
+    Carbon: 600, 540, 520, 415
+    Baseline load: 5.6, 5.9, 5.2, 6.9
+  Day 7 (Day 7 — Cool front lowers late-night load)
+    Tariff: 0.25, 0.18, 0.23, 0.20
+    Carbon: 520, 460, 480, 390
+    Baseline load: 5.0, 5.4, 5.1, 6.3
 Global weights α=40.00, β=0.50
 
 Agent roster (ordered along the feeder)
@@ -56,7 +85,7 @@ Agent 5 (Student tenant juggling late classes)
 
 Task framing
 ------------
-• Each household charges exactly one normalized EV unit in a single slot.
+• Each household charges exactly one normalized EV unit per day in a single slot.
 • Neighboring context is communicated using short in-context exemplars.
 • The pipeline provides the four-stage ECHO-MIMIC workflow for this energy domain.
 
