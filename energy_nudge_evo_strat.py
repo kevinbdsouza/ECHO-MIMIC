@@ -1,4 +1,4 @@
-"""Gemini-powered evolutionary search for EV behaviour nudges."""
+"""Gemini-powered evolutionary search for personalised EV nudges."""
 
 from __future__ import annotations
 
@@ -11,19 +11,42 @@ from typing import Dict, List, Sequence
 import google.generativeai as genai
 
 from echo_mimic.common import build_model, configure_genai, ensure_rate_limiter
+from echo_mimic.common.operators import (
+    make_operator_counts,
+    make_operator_deltas,
+    plot_best_trajectory_across_generations,
+    plot_population_operator_stats,
+)
 from echo_mimic.config import Config
-from echo_mimic.rate_limiter import send_message_with_retry
 from echo_mimic.domains.energy_ev import (
     build_stage_four_prompt,
     evaluate_agent_nudge_response,
     load_scenario,
 )
-
-from energy_evo_strat import EvolutionaryStrategy
-
+from echo_mimic.rate_limiter import send_message_with_retry
 
 cfg = Config()
 rate_limiter = ensure_rate_limiter(cfg)
+
+MESSAGE_GUIDELINES = (
+    "- Respond with valid JSON containing persona, recommended_slot, and message keys.\n"
+    "- The persona must match the agent profile in the prompt.\n"
+    "- recommended_slot must be an integer represented without quotes.\n"
+    "- Keep the message concise, factual, and aligned with feeder and comfort constraints.\n"
+)
+
+
+# ---------------------------------------------------------------------------
+# Model helpers
+# ---------------------------------------------------------------------------
+
+def init_model(model_name: str) -> genai.GenerativeModel:
+    configure_genai()
+    system_instructions = (
+        "You craft persuasive yet respectful energy-behaviour nudges. "
+        "Given persona context and policy code, output a JSON object with keys persona, recommended_slot, and message."
+    )
+    return build_model(model_name, system_instructions, ensure_configured=False)
 
 
 def _completion_text(completion: genai.types.GenerateContentResponse) -> str:
@@ -42,98 +65,151 @@ def _normalise_message(raw_text: str) -> str:
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
 
 
-def init_model(model_name: str) -> genai.GenerativeModel:
-    configure_genai()
-    system_instructions = (
-        "You craft persuasive yet respectful energy-behaviour nudges. "
-        "Given persona context and policy code, output a JSON object with keys persona, "
-        "recommended_slot, and message. Keep the JSON compact and factual."
-    )
-    return build_model(model_name, system_instructions, ensure_configured=False)
+# ---------------------------------------------------------------------------
+# Population helpers
+# ---------------------------------------------------------------------------
+
+def _make_candidate(message: str) -> Dict[str, object]:
+    counts = make_operator_counts()
+    counts["init"] += 1
+    return {
+        "message": message,
+        "score": 0.0,
+        "detail": {},
+        "counts": counts,
+        "fitness_deltas": make_operator_deltas(),
+        "trajectory": ["init(0.0000)"],
+    }
 
 
-def _ensure_prompt_file(path: Path, prompt: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(prompt, encoding="utf-8")
+def _load_population(pop_dir: Path, limit: int) -> List[Dict[str, object]]:
+    population: List[Dict[str, object]] = []
+    for path in sorted(pop_dir.glob("*.json"))[:limit]:
+        message = path.read_text(encoding="utf-8").strip()
+        if message:
+            population.append(_make_candidate(message))
+    return population
 
 
-def _generate_message(
-    *,
-    base_prompt: str,
-    heur_model: genai.GenerativeModel,
-    retry: int = 3,
-) -> str:
-    prompt = (
-        base_prompt
-        + "\n\nRespond with a single JSON object string matching the specification. "
-        "Do not include extra prose."
-    )
-
-    last_error: Exception | None = None
-    for _ in range(retry):
-        try:
-            session = heur_model.start_chat(history=[])
-            completion = send_message_with_retry(session, prompt, rate_limiter)
-            response_text = _completion_text(completion).strip()
-            if not response_text:
-                raise ValueError("Gemini returned an empty response")
-            return _normalise_message(response_text)
-        except Exception as exc:  # pragma: no cover - defensive
-            last_error = exc
-    raise RuntimeError(f"Failed to generate nudge message: {last_error}")
+def _write_population(pop_dir: Path, candidates: Sequence[Dict[str, object]]) -> None:
+    pop_dir.mkdir(parents=True, exist_ok=True)
+    for idx, cand in enumerate(candidates, start=1):
+        path = pop_dir / f"candidate_{idx:02d}.json"
+        path.write_text(cand["message"] + "\n", encoding="utf-8")
 
 
-def _mutate_message(
-    *,
-    base_prompt: str,
-    current_message: str,
-    evaluation_detail: Dict[str, object] | None,
-    heur_model: genai.GenerativeModel,
-    rng: random.Random,
-) -> str:
-    focus_hints = [
-        "strengthen the carbon benefit framing",
-        "acknowledge the household's comfort preferences",
-        "connect the request explicitly to neighbour examples",
-        "offer a concrete incentive or reassurance",
-    ]
-    hint = rng.choice(focus_hints)
-    feedback = json.dumps(evaluation_detail or {"note": "initial mutation"}, indent=2, sort_keys=True)
+# ---------------------------------------------------------------------------
+# Prompt operations
+# ---------------------------------------------------------------------------
 
-    pretty_message = json.dumps(json.loads(current_message), indent=2, sort_keys=True)
-
-    prompt = (
-        base_prompt
-        + "\n\nLatest evaluation feedback:\n"
-        + feedback
-        + "\n\nCurrent JSON message:\n"
-        + pretty_message
-        + "\n\nRevise the message to "
-        + hint
-        + ". Respond with a compact JSON object string only."
-    )
-
-    session = heur_model.start_chat(history=[])
+def _request_message(model: genai.GenerativeModel, prompt: str) -> str:
+    session = model.start_chat(history=[])
     completion = send_message_with_retry(session, prompt, rate_limiter)
-    response_text = _completion_text(completion).strip()
-    if not response_text:
-        raise RuntimeError("Mutation produced an empty response")
-    return _normalise_message(response_text)
+    text = _completion_text(completion).strip()
+    if not text:
+        raise RuntimeError("Model produced empty response")
+    return _normalise_message(text)
 
 
-def _load_population(population_dir: Path, limit: int) -> List[str]:
-    payloads: List[str] = []
-    for path in sorted(population_dir.glob("*.json"))[:limit]:
-        payloads.append(path.read_text(encoding="utf-8").strip())
-    return payloads
+def _mutate_message(prompt: str, parent: Dict[str, object], model: genai.GenerativeModel) -> Dict[str, object]:
+    op_prompt = (
+        prompt
+        + "\n\n"
+        + MESSAGE_GUIDELINES
+        + "\nRefine the existing JSON nudge by strengthening its reasoning while keeping the structure identical."
+        + " Return only the updated JSON object.\n\nCurrent message:\n"
+        + json.dumps(json.loads(parent["message"]), indent=2, sort_keys=True)
+    )
+    child_message = _request_message(model, op_prompt)
+    return _copy_child(parent, child_message, "mutate")
 
 
-def _write_population(population_dir: Path, messages: Sequence[str]) -> None:
-    population_dir.mkdir(parents=True, exist_ok=True)
-    for idx, message in enumerate(messages, start=1):
-        path = population_dir / f"candidate_{idx:02d}.json"
-        path.write_text(message + "\n", encoding="utf-8")
+def _crossover_message(prompt: str, parent_a: Dict[str, object], parent_b: Dict[str, object], model: genai.GenerativeModel) -> Dict[str, object]:
+    op_prompt = (
+        prompt
+        + "\n\n"
+        + MESSAGE_GUIDELINES
+        + "\nBlend the strongest persuasive elements from both JSON nudges into a single improved message."
+        + " Return only the merged JSON.\n\nParent A:\n"
+        + json.dumps(json.loads(parent_a["message"]), indent=2, sort_keys=True)
+        + "\n\nParent B:\n"
+        + json.dumps(json.loads(parent_b["message"]), indent=2, sort_keys=True)
+    )
+    child_message = _request_message(model, op_prompt)
+    dominant = parent_a if parent_a["score"] >= parent_b["score"] else parent_b
+    return _copy_child(dominant, child_message, "crossover")
 
+
+def _evolve_message(
+    prompt: str,
+    parent_a: Dict[str, object],
+    parent_b: Dict[str, object],
+    model: genai.GenerativeModel,
+    *,
+    explore_new: bool,
+) -> Dict[str, object]:
+    if explore_new:
+        instruction = "Design a substantially different JSON nudge exploring a new persuasive framing."
+        op_name = "evolve_1"
+    else:
+        instruction = (
+            "Identify shared themes between both nudges and extend them with deeper reasoning without copying."
+        )
+        op_name = "evolve_2"
+    op_prompt = (
+        prompt
+        + "\n\n"
+        + MESSAGE_GUIDELINES
+        + "\n"
+        + instruction
+        + " Return only the resulting JSON.\n\nParent A:\n"
+        + json.dumps(json.loads(parent_a["message"]), indent=2, sort_keys=True)
+        + "\n\nParent B:\n"
+        + json.dumps(json.loads(parent_b["message"]), indent=2, sort_keys=True)
+    )
+    child_message = _request_message(model, op_prompt)
+    dominant = parent_a if parent_a["score"] >= parent_b["score"] else parent_b
+    return _copy_child(dominant, child_message, op_name)
+
+
+def _reflect_messages(prompt: str, population: Sequence[Dict[str, object]], model: genai.GenerativeModel) -> List[Dict[str, object]]:
+    top_candidates = sorted(population, key=lambda cand: cand["score"], reverse=True)[:5]
+    if not top_candidates:
+        return []
+    summary_lines = []
+    for idx, cand in enumerate(top_candidates, start=1):
+        summary_lines.append(
+            f"Message {idx} (score={cand['score']:.4f}):\n{json.dumps(json.loads(cand['message']), indent=2, sort_keys=True)}"
+        )
+    op_prompt = (
+        prompt
+        + "\n\n"
+        + MESSAGE_GUIDELINES
+        + "\nReflect on the best nudges and craft a higher-impact JSON message."
+        + " Explain reasoning internally but return only the JSON.\n\n"
+        + "\n\n".join(summary_lines)
+    )
+    child_message = _request_message(model, op_prompt)
+    dominant = top_candidates[0]
+    return [_copy_child(dominant, child_message, "reflect")]
+
+
+def _copy_child(parent: Dict[str, object], message: str, op: str) -> Dict[str, object]:
+    return {
+        "message": message,
+        "score": 0.0,
+        "detail": {},
+        "counts": parent["counts"].copy(),
+        "fitness_deltas": parent["fitness_deltas"].copy(),
+        "trajectory": parent["trajectory"][:],
+        "pending_op": op,
+        "pending_parent_score": parent["score"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Evolution loop
+# ---------------------------------------------------------------------------
 
 def run(
     *,
@@ -141,6 +217,7 @@ def run(
     agent_id: int,
     population_size: int,
     generations: int,
+    inner_loop_size: int,
     seed: int,
     init: bool,
     model_name: str | None = None,
@@ -154,60 +231,108 @@ def run(
         raise ValueError(f"Unknown agent id {agent_id}")
 
     agent_dir = scenario_dir / "nudge" / f"agent_{agent_id}"
+    pop_dir = agent_dir / "population"
+    gen_dir = agent_dir / "generations"
     agent_dir.mkdir(parents=True, exist_ok=True)
-    population_dir = agent_dir / "population"
+    pop_dir.mkdir(parents=True, exist_ok=True)
+    gen_dir.mkdir(parents=True, exist_ok=True)
 
     prompt = build_stage_four_prompt(scenario, agent_id, scenario_dir=scenario_dir)
-    _ensure_prompt_file(agent_dir / "prompt_input.txt", prompt)
+    agent_dir.joinpath("prompt_input.txt").write_text(prompt, encoding="utf-8")
 
-    heur_model = init_model(model_name or cfg.lm)
+    model = init_model(model_name or cfg.lm)
+    rng = random.Random(seed)
 
     if init:
-        messages: List[str] = []
+        seeds: List[Dict[str, object]] = []
         for _ in range(population_size):
-            message = _generate_message(
-                base_prompt=prompt,
-                heur_model=heur_model,
+            message = _request_message(
+                model,
+                prompt
+                + "\n\n"
+                + MESSAGE_GUIDELINES
+                + "\nReturn only one JSON object that satisfies the constraints.",
             )
-            messages.append(message)
-        _write_population(population_dir, messages)
+            seeds.append(_make_candidate(message))
+        _write_population(pop_dir, seeds)
 
-    initial_population = _load_population(population_dir, population_size)
-    if not initial_population:
+    population = _load_population(pop_dir, population_size)
+    if not population:
         raise RuntimeError("No initial population found. Run with --init to generate seeds.")
 
-    feedback_map: Dict[str, Dict[str, object]] = {}
-
-    def evaluate(message: str) -> tuple[float, Dict[str, object]]:
+    def evaluate(candidate: Dict[str, object]) -> Dict[str, object]:
         score, detail = evaluate_agent_nudge_response(
-            message,
+            candidate["message"],
             scenario=scenario,
             agent_id=agent_id,
         )
-        feedback_map[message] = detail
-        return score, detail
+        candidate["score"] = score
+        candidate["detail"] = detail
+        op = candidate.pop("pending_op", None)
+        parent_score = candidate.pop("pending_parent_score", None)
+        if op is not None and parent_score is not None:
+            delta = score - parent_score
+            candidate["counts"][op] += 1
+            candidate["fitness_deltas"][op] += delta
+            candidate["trajectory"].append(f"{op}({delta:+.4f})")
+        return candidate
 
-    def mutate(message: str, rng: random.Random) -> str:
-        return _mutate_message(
-            base_prompt=prompt,
-            current_message=message,
-            evaluation_detail=feedback_map.get(message),
-            heur_model=heur_model,
-            rng=rng,
+    population = [evaluate(candidate) for candidate in population]
+    history: List[Dict[str, object]] = []
+
+    for generation in range(generations + 1):
+        best = max(population, key=lambda cand: cand["score"])
+        history.append(
+            {
+                "generation": generation,
+                "best_score": best["score"],
+                "best_detail": best.get("detail"),
+                "trajectory": best.get("trajectory"),
+                "counts": best.get("counts"),
+                "fitness_deltas": best.get("fitness_deltas"),
+            }
         )
+        plot_best_trajectory_across_generations(history[-1:], str(gen_dir))
+        plot_population_operator_stats(population, generation, str(gen_dir))
+        _write_population(pop_dir, population[:population_size])
 
-    strategy = EvolutionaryStrategy(
-        evaluate=evaluate,
-        mutate=mutate,
-        population_size=population_size,
-        seed=seed,
-    )
+        if generation == generations:
+            break
 
-    best, history = strategy.run(initial_population, generations)
+        operator_cycle = ("mutate", "crossover", "evolve_1", "evolve_2")
+        offspring: List[Dict[str, object]] = []
+        while len(offspring) < inner_loop_size:
+            op_name = operator_cycle[len(offspring) % len(operator_cycle)]
+            try:
+                if op_name == "mutate":
+                    parent = rng.choice(population)
+                    child = _mutate_message(prompt, parent, model)
+                elif op_name == "crossover":
+                    parents = rng.sample(population, k=2)
+                    child = _crossover_message(prompt, parents[0], parents[1], model)
+                elif op_name == "evolve_1":
+                    parents = rng.sample(population, k=2)
+                    child = _evolve_message(prompt, parents[0], parents[1], model, explore_new=True)
+                else:
+                    parents = rng.sample(population, k=2)
+                    child = _evolve_message(prompt, parents[0], parents[1], model, explore_new=False)
+                offspring.append(child)
+            except Exception as exc:
+                print(f"[warn] {op_name} failed: {exc}")
 
-    agent_dir.joinpath("best_message.json").write_text(best.payload + "\n", encoding="utf-8")
+        offspring = [evaluate(child) for child in offspring]
+        reflect_children = _reflect_messages(prompt, population, model)
+        reflect_children = [evaluate(child) for child in reflect_children]
+
+        combined = population + offspring + reflect_children
+        combined.sort(key=lambda cand: cand["score"], reverse=True)
+        population = combined[: population_size]
+
+    best = max(population, key=lambda cand: cand["score"])
+
+    agent_dir.joinpath("best_message.json").write_text(best["message"] + "\n", encoding="utf-8")
     agent_dir.joinpath("best_message_detail.json").write_text(
-        json.dumps(best.detail, indent=2, sort_keys=True) + "\n",
+        json.dumps(best.get("detail", {}), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     agent_dir.joinpath("evo_history.json").write_text(
@@ -215,9 +340,7 @@ def run(
         encoding="utf-8",
     )
 
-    print(
-        f"Completed nudge evolution for agent {agent_id}: best score {best.score:.3f}"
-    )
+    print(f"Completed nudge evolution for agent {agent_id}: best score {best['score']:.3f}")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -229,8 +352,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Directory containing scenario.json and agent subfolders.",
     )
     parser.add_argument("--agent-id", type=int, required=True, help="Target agent id to optimise.")
-    parser.add_argument("--population-size", type=int, default=6, help="Population size for the ES loop.")
+    parser.add_argument("--population-size", type=int, default=8, help="Population size for the ES loop.")
     parser.add_argument("--generations", type=int, default=6, help="Number of generations to evolve.")
+    parser.add_argument(
+        "--inner-loop-size",
+        type=int,
+        default=12,
+        help="Number of offspring attempts per generation.",
+    )
     parser.add_argument("--seed", type=int, default=23, help="Random seed for reproducibility.")
     parser.add_argument(
         "--no-init",
@@ -251,6 +380,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         agent_id=args.agent_id,
         population_size=max(1, args.population_size),
         generations=max(0, args.generations),
+        inner_loop_size=max(1, args.inner_loop_size),
         seed=args.seed,
         init=not args.no_init,
         model_name=args.model,
@@ -259,4 +389,3 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-
