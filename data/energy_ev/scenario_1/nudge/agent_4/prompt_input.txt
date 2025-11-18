@@ -3,12 +3,12 @@ MIMIC Stage 4 (Nudging) — Agent 4
 
 Persona context
 ---------------
-Retired couple monitoring comfort and bills
+Position 4 retirees guarding comfort and grid warnings
 
 Neighbour exemplars (still the only observations available)
 ----------------------------------------------------------
-- Neighbor 3 → slot 2 (Central neighbor anchors on 21-22h to keep routine)
-- Neighbor 5 → slot 3 (Downstream neighbor also favors final slot when peak warning issued)
+- Neighbor 3 → slot 3 (Central nurse dipped into slot 3 when lull hours opened)
+- Neighbor 5 → slot 0 (Student picked slot 0 to avoid wasting the required slot)
 
 Current heuristics snapshot
 ---------------------------

@@ -1,36 +1,36 @@
 {
   "agent_id": 1,
-  "persona": "Budget-sensitive engineer with a solar-equipped townhouse",
+  "persona": "Position 1 battery engineer balancing budget and solar backfeed",
   "recommended_slots": [
+    0,
     1,
+    2,
+    0,
     1,
-    3,
-    1,
-    3,
-    3,
-    1
+    2,
+    0
   ],
   "local_best_slots_by_day": [
     [
-      1
+      0
     ],
     [
-      1
+      2
     ],
     [
-      1
+      0
     ],
     [
-      1
+      0
     ],
     [
-      1
+      0
     ],
     [
-      1
+      2
     ],
     [
-      1
+      0
     ]
   ],
   "notes": "Nudge messages should reconcile the agent's imitation heuristic with the coordinated recommendation."

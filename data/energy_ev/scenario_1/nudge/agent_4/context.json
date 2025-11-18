@@ -1,36 +1,36 @@
 {
   "agent_id": 4,
-  "persona": "Retired couple monitoring comfort and bills",
+  "persona": "Position 4 retirees guarding comfort and grid warnings",
   "recommended_slots": [
     3,
     3,
     3,
-    3,
+    2,
     3,
     3,
     3
   ],
   "local_best_slots_by_day": [
     [
-      3
+      0
     ],
     [
-      3
+      0
     ],
     [
-      3
+      0
     ],
     [
-      3
+      0
     ],
     [
-      3
+      0
     ],
     [
-      3
+      0
     ],
     [
-      3
+      0
     ]
   ],
   "notes": "Nudge messages should reconcile the agent's imitation heuristic with the coordinated recommendation."

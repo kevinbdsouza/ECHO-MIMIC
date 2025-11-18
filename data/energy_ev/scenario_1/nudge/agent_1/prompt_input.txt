@@ -3,12 +3,12 @@ MIMIC Stage 4 (Nudging) — Agent 1
 
 Persona context
 ---------------
-Budget-sensitive engineer with a solar-equipped townhouse
+Position 1 battery engineer balancing budget and solar backfeed
 
 Neighbour exemplars (still the only observations available)
 ----------------------------------------------------------
-- Neighbor 2 → slot 1 (Neighbor moved earlier to ride lower price despite mild carbon bump)
-- Neighbor 2 → slot 0 (On feeder warning day neighbor took earliest slot to protect 21-22h peak)
+- Neighbor 2 → slot 1 (Analyst neighbor slid to slot 1 to satisfy the slot minima)
+- Neighbor 3 → slot 2 (Central nurse anchored on slot 2 when slot 3 hit capacity)
 
 Current heuristics snapshot
 ---------------------------

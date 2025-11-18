@@ -3,12 +3,12 @@ MIMIC Stage 4 (Nudging) — Agent 3
 
 Persona context
 ---------------
-Night-shift nurse who values rest and reliability
+Position 3 night-shift nurse on the central ridge
 
 Neighbour exemplars (still the only observations available)
 ----------------------------------------------------------
-- Neighbor 2 → slot 1 (Upstream neighbor leans on 20-21h when feeder is loose)
-- Neighbor 4 → slot 3 (Downstream neighbor absorbs late slot to dodge carbon)
+- Neighbor 2 → slot 2 (Analyst stayed on slot 2 when feeder stress stayed low)
+- Neighbor 5 → slot 1 (Student tenant mirrored the ridge plan to align with transit)
 
 Current heuristics snapshot
 ---------------------------
