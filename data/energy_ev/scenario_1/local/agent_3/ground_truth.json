@@ -1,27 +1,27 @@
 {
   "agent_id": 3,
-  "persona": "Night-shift nurse who values rest and reliability",
+  "persona": "Position 3 night-shift nurse on the central ridge",
   "best_slots_by_day": [
     [
-      2
+      1
     ],
     [
-      2
+      1
     ],
     [
-      2
+      1
     ],
     [
-      2
+      3
     ],
     [
-      2
+      1
     ],
     [
-      2
+      1
     ],
     [
-      2
+      1
     ]
   ]
 }

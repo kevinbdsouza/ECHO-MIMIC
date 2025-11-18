@@ -1,14 +1,14 @@
 {
   "agent_id": 4,
-  "persona": "Retired couple monitoring comfort and bills",
+  "persona": "Position 4 retirees guarding comfort and grid warnings",
   "recommended_slots": [
     3,
     3,
     3,
-    3,
+    2,
     3,
     3,
     3
   ],
-  "objective": 8408.0
+  "objective": 5960.0
 }

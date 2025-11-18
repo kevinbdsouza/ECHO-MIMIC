@@ -17,6 +17,7 @@ class DayProfile:
     baseline_load: Tuple[float, float, float, float]
     price: Tuple[float, float, float, float]
     carbon_intensity: Tuple[float, float, float, float]
+    spatial_carbon: Dict[str, Tuple[float, float, float, float]]
     note: str = ""
 
     @staticmethod
@@ -31,11 +32,16 @@ class DayProfile:
         baseline = _coerce_sequence(payload["baseline_load"], "baseline_load")
         price = _coerce_sequence(payload["price"], "price")
         carbon = _coerce_sequence(payload["carbon_intensity"], "carbon_intensity")
+        spatial_payload = payload.get("spatial_carbon", {})
+        spatial: Dict[str, Tuple[float, float, float, float]] = {}
+        for location, values in spatial_payload.items():
+            spatial[location] = _coerce_sequence(values, f"spatial_carbon[{location}]")
         return DayProfile(
             name=str(payload.get("name", "Day")),
             baseline_load=baseline,
             price=price,
             carbon_intensity=carbon,
+            spatial_carbon=spatial,
             note=str(payload.get("note", "")),
         )
 
@@ -45,8 +51,18 @@ class DayProfile:
             "baseline_load": list(self.baseline_load),
             "price": list(self.price),
             "carbon_intensity": list(self.carbon_intensity),
+            "spatial_carbon": {
+                location: list(values) for location, values in self.spatial_carbon.items()
+            },
             "note": self.note,
         }
+
+    def carbon_for_slot(self, slot: int, *, location: str | None = None) -> float:
+        if location:
+            values = self.spatial_carbon.get(location)
+            if values is not None:
+                return values[slot]
+        return self.carbon_intensity[slot]
 
 @dataclass(frozen=True)
 class AgentConfig:
@@ -57,6 +73,7 @@ class AgentConfig:
     preferred_slots: Tuple[int, ...]
     comfort_penalty: float
     persona: str
+    location: str
     neighbor_examples: Tuple[Dict[str, object], ...]
 
     @staticmethod
@@ -67,6 +84,7 @@ class AgentConfig:
             preferred_slots=tuple(int(x) for x in payload.get("preferred_slots", [])),
             comfort_penalty=float(payload.get("comfort_penalty", 0.0)),
             persona=str(payload.get("persona", "")),
+            location=str(payload.get("location", "feeder")),
             neighbor_examples=tuple(dict(example) for example in payload.get("neighbor_examples", [])),
         )
 
@@ -77,6 +95,7 @@ class AgentConfig:
             "preferred_slots": list(self.preferred_slots),
             "comfort_penalty": self.comfort_penalty,
             "persona": self.persona,
+            "location": self.location,
             "neighbor_examples": [dict(example) for example in self.neighbor_examples],
         }
 
@@ -92,10 +111,13 @@ class EVScenario:
     baseline_load: Tuple[float, float, float, float]
     price: Tuple[float, float, float, float]
     carbon_intensity: Tuple[float, float, float, float]
+    slot_min_sessions: Tuple[int, int, int, int]
+    slot_max_sessions: Tuple[int, int, int, int]
     daily_profiles: Tuple[DayProfile, ...]
     agents: Tuple[AgentConfig, AgentConfig, AgentConfig, AgentConfig, AgentConfig]
     alpha: float
     beta: float
+    gamma: float
 
     def serialize(self) -> Dict[str, object]:
         return {
@@ -106,9 +128,11 @@ class EVScenario:
             "baseline_load": list(self.baseline_load),
             "price": list(self.price),
             "carbon_intensity": list(self.carbon_intensity),
+            "slot_min_sessions": list(self.slot_min_sessions),
+            "slot_max_sessions": list(self.slot_max_sessions),
             "agents": [agent.serialize() for agent in self.agents],
             "days": [day.serialize() for day in self.daily_profiles],
-            "weights": {"alpha": self.alpha, "beta": self.beta},
+            "weights": {"alpha": self.alpha, "beta": self.beta, "gamma": self.gamma},
         }
 
     @property
@@ -127,6 +151,7 @@ def load_scenario(path: Path) -> EVScenario:
         payload = json.load(handle)
 
     slots = tuple(str(slot) for slot in payload["slots"])
+    num_slots = len(slots)
     agents = tuple(AgentConfig.from_dict(agent) for agent in payload["agents"])
     weights = payload.get("weights", {})
 
@@ -142,8 +167,21 @@ def load_scenario(path: Path) -> EVScenario:
             baseline_load=tuple(float(x) for x in payload["baseline_load"]),
             price=tuple(float(x) for x in payload["price"]),
             carbon_intensity=tuple(float(x) for x in payload["carbon_intensity"]),
+            spatial_carbon={},
         )
         daily_profiles = (fallback,)
+
+    default_minimums = [0 for _ in range(num_slots)]
+    slot_minimums_raw = payload.get("slot_min_sessions", default_minimums)
+    if len(slot_minimums_raw) != num_slots:
+        raise ValueError("slot_min_sessions must match number of slots")
+    slot_minimums = tuple(int(value) for value in slot_minimums_raw)
+
+    default_maximums = [len(agents) for _ in range(num_slots)]
+    slot_maximums_raw = payload.get("slot_max_sessions", default_maximums)
+    if len(slot_maximums_raw) != num_slots:
+        raise ValueError("slot_max_sessions must match number of slots")
+    slot_maximums = tuple(int(value) for value in slot_maximums_raw)
 
     return EVScenario(
         scenario_id=str(payload["scenario_id"]),
@@ -153,10 +191,13 @@ def load_scenario(path: Path) -> EVScenario:
         baseline_load=tuple(float(x) for x in payload["baseline_load"]),
         price=tuple(float(x) for x in payload["price"]),
         carbon_intensity=tuple(float(x) for x in payload["carbon_intensity"]),
+        slot_min_sessions=slot_minimums,
+        slot_max_sessions=slot_maximums,
         daily_profiles=daily_profiles,
         agents=agents,  # type: ignore[arg-type]
         alpha=float(weights.get("alpha", 1.0)),
         beta=float(weights.get("beta", 0.0)),
+        gamma=float(weights.get("gamma", 1.0)),
     )
 
 
@@ -181,19 +222,7 @@ def compute_global_cost(
 
     total_cost = 0.0
     for day_idx, allocation in enumerate(allocation_by_day):
-        if len(allocation) != scenario.num_agents:
-            raise ValueError("Each day must assign slots for every agent.")
-        day = scenario.daily_profiles[day_idx]
-        slot_loads = [day.baseline_load[t] for t in range(len(scenario.slots))]
-        for slot in allocation:
-            slot_loads[slot] += 1.0
-        feeder_overload = 0.0
-        for load in slot_loads:
-            exceedance = max(0.0, load - scenario.capacity)
-            feeder_overload = max(feeder_overload, exceedance)
-
-        carbon_term = sum(day.carbon_intensity[slot] for slot in allocation)
-        total_cost += scenario.alpha * feeder_overload + scenario.beta * carbon_term
+        total_cost += _day_global_cost(scenario, day_idx, allocation)
 
     return total_cost
 
@@ -223,16 +252,40 @@ def enumerate_global_optimum(scenario: EVScenario) -> Tuple[List[List[int]], flo
 def _day_global_cost(
     scenario: EVScenario, day_idx: int, allocation: Sequence[int]
 ) -> float:
+    if len(allocation) != scenario.num_agents:
+        raise ValueError("Each day must assign slots for every agent.")
+
     day = scenario.daily_profiles[day_idx]
-    slot_loads = [day.baseline_load[t] for t in range(len(scenario.slots))]
-    for slot in allocation:
+    num_slots = len(scenario.slots)
+    slot_loads = [day.baseline_load[t] for t in range(num_slots)]
+    slot_counts = [0 for _ in range(num_slots)]
+    carbon_term = 0.0
+
+    for agent_idx, slot in enumerate(allocation):
         slot_loads[slot] += 1.0
+        slot_counts[slot] += 1
+        agent = scenario.agents[agent_idx]
+        carbon_term += day.carbon_for_slot(slot, location=agent.location)
+
     feeder_overload = 0.0
     for load in slot_loads:
         exceedance = max(0.0, load - scenario.capacity)
         feeder_overload = max(feeder_overload, exceedance)
-    carbon_term = sum(day.carbon_intensity[slot] for slot in allocation)
-    return scenario.alpha * feeder_overload + scenario.beta * carbon_term
+
+    min_penalty = 0.0
+    max_penalty = 0.0
+    for idx, minimum in enumerate(scenario.slot_min_sessions):
+        min_penalty += max(0, minimum - slot_counts[idx])
+    for idx, maximum in enumerate(scenario.slot_max_sessions):
+        max_penalty += max(0, slot_counts[idx] - maximum)
+
+    usage_penalty = min_penalty + max_penalty
+
+    return (
+        scenario.alpha * feeder_overload
+        + scenario.beta * carbon_term
+        + scenario.gamma * usage_penalty
+    )
 
 
 def enumerate_local_optima(scenario: EVScenario) -> Dict[int, List[List[int]]]:
@@ -295,8 +348,11 @@ def dump_ground_truth(directory: Path, scenario: EVScenario) -> None:
         "metadata": {
             "alpha": scenario.alpha,
             "beta": scenario.beta,
+            "gamma": scenario.gamma,
             "capacity": scenario.capacity,
             "baseline_load": list(scenario.baseline_load),
+            "slot_min_sessions": list(scenario.slot_min_sessions),
+            "slot_max_sessions": list(scenario.slot_max_sessions),
             "days": [day.serialize() for day in scenario.daily_profiles],
         },
     }

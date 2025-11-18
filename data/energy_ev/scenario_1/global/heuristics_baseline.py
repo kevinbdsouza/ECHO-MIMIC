@@ -13,19 +13,40 @@ days = scenario.get("days") or [
 capacity = scenario["capacity"]
 alpha = scenario["weights"]["alpha"]
 beta = scenario["weights"]["beta"]
+gamma = scenario["weights"].get("gamma", 1.0)
 num_agents = len(scenario["agents"])
 num_slots = len(scenario["slots"])
+slot_minimums = scenario.get("slot_min_sessions", [0 for _ in range(num_slots)])
+slot_maximums = scenario.get(
+    "slot_max_sessions", [num_agents for _ in range(num_slots)]
+)
+
+
+def _carbon_for(day, slot, agent):
+    spatial = day.get("spatial_carbon", {})
+    location = agent.get("location")
+    if location in spatial:
+        return spatial[location][slot]
+    return day.get("carbon_intensity", scenario["carbon_intensity"])[slot]
 
 
 def evaluate_day(day, allocation):
     baseline = day["baseline_load"]
-    carbon = day.get("carbon_intensity", scenario["carbon_intensity"])
     slot_loads = [baseline[idx] for idx in range(num_slots)]
-    for slot in allocation:
+    slot_counts = [0 for _ in range(num_slots)]
+    carbon_term = 0.0
+    for agent_idx, slot in enumerate(allocation):
         slot_loads[slot] += 1.0
+        slot_counts[slot] += 1
+        carbon_term += _carbon_for(day, slot, scenario["agents"][agent_idx])
     overload = max(0.0, max(slot_loads) - capacity)
-    carbon_term = sum(carbon[slot] for slot in allocation)
-    return alpha * overload + beta * carbon_term
+    min_penalty = sum(
+        max(0, slot_minimums[idx] - slot_counts[idx]) for idx in range(num_slots)
+    )
+    max_penalty = sum(
+        max(0, slot_counts[idx] - slot_maximums[idx]) for idx in range(num_slots)
+    )
+    return alpha * overload + beta * carbon_term + gamma * (min_penalty + max_penalty)
 
 
 daily_allocations = []

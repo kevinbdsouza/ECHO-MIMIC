@@ -3,12 +3,12 @@ MIMIC Stage 4 (Nudging) — Agent 5
 
 Persona context
 ---------------
-Student tenant juggling late classes
+Position 5 graduate tenant commuting late from campus
 
 Neighbour exemplars (still the only observations available)
 ----------------------------------------------------------
-- Neighbor 4 → slot 3 (Upstream neighbor usually sits at 22-23h unless feeder alarms)
-- Neighbor 4 → slot 2 (On price spike nights upstream shifts to 21-22h to dodge carbon)
+- Neighbor 4 → slot 3 (Retirees stayed in slot 3 to watch overnight voltage)
+- Neighbor 1 → slot 2 (Battery neighbor flexed to slot 2 when carbon dipped there)
 
 Current heuristics snapshot
 ---------------------------

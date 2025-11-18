@@ -1,14 +1,14 @@
 {
   "agent_id": 1,
-  "persona": "Budget-sensitive engineer with a solar-equipped townhouse",
+  "persona": "Position 1 battery engineer balancing budget and solar backfeed",
   "recommended_slots": [
+    0,
     1,
+    2,
+    0,
     1,
-    3,
-    1,
-    3,
-    3,
-    1
+    2,
+    0
   ],
-  "objective": 8408.0
+  "objective": 5960.0
 }

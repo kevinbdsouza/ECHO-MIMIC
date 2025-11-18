@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from textwrap import indent
-from typing import Dict
+from typing import Dict, Sequence
 
-from .scenario import EVScenario
+from .scenario import DayProfile, EVScenario
 
 
 def _load_template(name: str) -> str:
@@ -100,6 +100,10 @@ def _stage_one_context(scenario: EVScenario) -> Dict[str, str]:
         "capacity": f"{scenario.capacity:.1f}",
         "alpha": f"{scenario.alpha:.2f}",
         "beta": f"{scenario.beta:.2f}",
+        "gamma": f"{scenario.gamma:.2f}",
+        "slot_minimums": _format_slot_requirements(scenario.slot_min_sessions),
+        "slot_maximums": _format_slot_requirements(scenario.slot_max_sessions),
+        "spatial_carbon_summary": _spatial_carbon_summary(scenario),
         "agents": "\n\n".join(agent_lines),
         "daily_conditions": _daily_conditions_block(scenario),
     }
@@ -117,6 +121,10 @@ def _shared_context(scenario: EVScenario) -> Dict[str, str]:
         "capacity": f"{scenario.capacity:.1f}",
         "alpha": f"{scenario.alpha:.2f}",
         "beta": f"{scenario.beta:.2f}",
+        "gamma": f"{scenario.gamma:.2f}",
+        "slot_minimums": _format_slot_requirements(scenario.slot_min_sessions),
+        "slot_maximums": _format_slot_requirements(scenario.slot_max_sessions),
+        "spatial_carbon_summary": _spatial_carbon_summary(scenario),
         "daily_conditions": _daily_conditions_block(scenario),
     }
 
@@ -141,6 +149,7 @@ def _agent_block(scenario: EVScenario, agent_id: int) -> Dict[str, str]:
         "base_demand": ", ".join(f"{value:.2f}" for value in agent.base_demand),
         "preferred_slots": ", ".join(str(idx) for idx in agent.preferred_slots) or "None",
         "comfort_penalty": f"{agent.comfort_penalty:.2f}",
+        "agent_location": agent.location,
         "neighbor_examples": neighbor_lines,
     }
 
@@ -191,9 +200,50 @@ def _daily_conditions_block(scenario: EVScenario) -> str:
                     + ", ".join(f"{value:.0f}" for value in day.carbon_intensity),
                     "    Baseline load: "
                     + ", ".join(f"{value:.1f}" for value in day.baseline_load),
+                    _format_spatial_carbon_line(day),
                 ]
             )
         )
     if not lines:
         return "  No multi-day context provided"
     return "\n".join(lines)
+
+
+def _format_slot_requirements(values: Sequence[int]) -> str:
+    return ", ".join(f"{idx}: {value}" for idx, value in enumerate(values))
+
+
+def _spatial_carbon_summary(scenario: EVScenario) -> str:
+    zones = sorted({agent.location for agent in scenario.agents})
+    if not zones:
+        return "uniform"
+
+    num_slots = len(scenario.slots)
+    summaries = []
+    for zone in zones:
+        totals = [0.0 for _ in range(num_slots)]
+        count = 0
+        for day in scenario.daily_profiles:
+            values = day.spatial_carbon.get(zone)
+            if values is None:
+                continue
+            totals = [a + b for a, b in zip(totals, values)]
+            count += 1
+        if count:
+            averages = [value / count for value in totals]
+        else:
+            averages = list(scenario.carbon_intensity)
+        summaries.append(
+            f"{zone}: " + ", ".join(f"{value:.0f}" for value in averages)
+        )
+    return " | ".join(summaries)
+
+
+def _format_spatial_carbon_line(day: DayProfile) -> str:
+    if not day.spatial_carbon:
+        return "    Spatial carbon: uniform"
+    zone_bits = "; ".join(
+        f"{zone}: " + ", ".join(f"{value:.0f}" for value in values)
+        for zone, values in sorted(day.spatial_carbon.items())
+    )
+    return "    Spatial carbon: " + zone_bits

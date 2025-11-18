@@ -6,13 +6,17 @@ Slots (index → hour): {slots}
 Feeder capacity: {capacity}
 Baseline load: {baseline}
 Carbon intensity: {carbon}
+Minimum EV sessions per slot: {slot_minimums}
+Maximum EV sessions per slot: {slot_maximums}
+Spatial carbon gradient (location → gCO2/kWh): {spatial_carbon_summary}
 7-day feeder outlook:
 {daily_conditions}
-Weights: α={alpha}, β={beta}
+Weights: α={alpha}, β={beta}, γ={gamma}
 
 Your profile
 ------------
 Persona: {persona}
+Feeder location: {agent_location}
 Base demand per slot: {base_demand}
 Preferred slots: {preferred_slots}
 Comfort penalty baseline: {comfort_penalty}

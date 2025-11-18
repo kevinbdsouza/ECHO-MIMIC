@@ -10,9 +10,12 @@ Feeder capacity (kW equivalent): {capacity}
 Baseline non-EV load (kW): {baseline}
 Retail tariff ($/kWh): {price}
 Grid carbon intensity (gCO2/kWh): {carbon}
+Minimum EV sessions per slot: {slot_minimums}
+Maximum EV sessions per slot: {slot_maximums}
+Spatial carbon gradient (location → gCO2/kWh): {spatial_carbon_summary}
 Seven-day feeder outlook:
 {daily_conditions}
-Global weights α={alpha}, β={beta}
+Global weights α={alpha}, β={beta}, γ={gamma}
 
 Agent roster (ordered along the feeder)
 --------------------------------------
