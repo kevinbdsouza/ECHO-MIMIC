@@ -678,7 +678,7 @@ def run(
 
     target_farm_ids = farm_ids or [3]
 
-    syn_farm_dir = cfg.data_dir
+    syn_farm_dir = cfg.farms_dir
     all_farms_geojson_path = os.path.join(syn_farm_dir, "farms_cp.geojson")
 
     for farm_identifier in target_farm_ids:

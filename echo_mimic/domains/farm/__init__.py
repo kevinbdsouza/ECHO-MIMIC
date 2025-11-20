@@ -13,9 +13,11 @@ from farm_evo_strat import run as run_farm_local
 from graph_evo_strat import run as run_farm_global
 from nudge_evo_strat import run as run_farm_nudge
 
-from dspy_baseline_farm import main as run_dspy_local
-from dspy_baseline_global import main as run_dspy_global
-from dspy_baseline_nudge import main as run_dspy_nudge
+from echo_mimic.baselines.dspy import (
+    run_dspy_farm as run_dspy_local,
+    run_dspy_global,
+    run_dspy_nudge,
+)
 
 from echo_mimic.baselines.autogen import AutoGenBaseline
 
@@ -92,7 +94,7 @@ class FarmDomain:
             mode=self.config.mode,
             agent_id=self.config.agent_id,
             model=self.config.model,
-            data_hint="data/farm_*/",
+            data_hint="data/farm/farm_*/",
         )
 
     def run(self) -> None:

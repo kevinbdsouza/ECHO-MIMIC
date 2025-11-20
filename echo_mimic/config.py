@@ -7,10 +7,10 @@ class Config:
         #cwd = os.getcwd()
         self.src_dir = os.getcwd()
         self.data_dir = os.path.join(self.src_dir, "data")
+        self.farms_dir = os.path.join(self.data_dir, "farm")
         self.plot_dir = os.path.join(self.src_dir, "plots")
 
         # DSPy configuration values
-        self.farms_dir = os.path.join(self.data_dir)
         self.lm = "gemini-flash-lite-latest"
         self.auto = "heavy"
         self.trials = 50

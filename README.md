@@ -8,7 +8,7 @@ Collective action problems are classic examples of Ill-Structured Problems (ISPs
 
 The framework is demonstrated on agricultural landscape management, where local farming decisions impact global ecological connectivity, but the approach applies broadly to other collective action domains including decentralized resource management and policy design.
 
-![ECHO-MIMIC Framework Overview](data/intro_em.png)
+![ECHO-MIMIC Framework Overview](data/farm/intro_em.png)
 
 ## Key Features
 
@@ -31,6 +31,9 @@ The framework is demonstrated on agricultural landscape management, where local 
 .
 ├── echo_mimic/
 │   ├── __init__.py              # Package entry point
+│   ├── baselines/               # AutoGen + DSPy comparison methods
+│   │   ├── autogen.py           # AutoGen-style planner/critic loop
+│   │   └── dspy/                # DSPy baselines (farm/global/nudge)
 │   ├── config.py                # Configuration and parameters
 │   ├── common/                  # LLM helpers, code execution, and fix utilities
 │   ├── prompts/                 # Prompt generation utilities
@@ -39,7 +42,6 @@ The framework is demonstrated on agricultural landscape management, where local 
 │   ├── rate_limiter.py          # API rate limiting utilities
 │   └── dspy_rate_limiter.py     # DSPy LM wrapper with rate limiting
 ├── create_prompts.py            # Backwards-compatible prompt exports
-├── dspy_baseline_*.py           # DSPy baseline implementations
 ├── *_evo_strat.py               # Evolutionary strategy entry points
 ├── run_experimental_suite.py    # Personality-Nudge experimental runner
 └── requirements.txt             # Python dependencies
@@ -47,6 +49,9 @@ The framework is demonstrated on agricultural landscape management, where local 
 
 All shared runtime logic now lives under the structured `echo_mimic` package, while the
 high-level experiment drivers remain as top-level scripts.
+
+Farm-specific datasets (plots, ground-truth labels, and prompt seeds) are located under `data/farm/`,
+while the energy EV datasets remain in `data/energy_ev/`.
 
 ## Core Components
 
@@ -60,9 +65,9 @@ high-level experiment drivers remain as top-level scripts.
 - **`nudge_evo_strat.py`**: **Stage 4** - Behavioral nudging optimization and message evolution
 
 ### 2. DSPy Baselines (Comparison Methods)
-- **`dspy_baseline_farm.py`**: **Stage 2** DSPy baseline for learning farm-level heuristics
-- **`dspy_baseline_global.py`**: **Stage 3** DSPy baseline for global connectivity optimization
-- **`dspy_baseline_nudge.py`**: **Stage 4** DSPy baseline for nudging/behavioral messaging
+- **`echo_mimic/baselines/dspy/farm.py`**: **Stage 2** DSPy baseline for learning farm-level heuristics
+- **`echo_mimic/baselines/dspy/global_baseline.py`**: **Stage 3** DSPy baseline for global connectivity optimization
+- **`echo_mimic/baselines/dspy/nudge.py`**: **Stage 4** DSPy baseline for nudging/behavioral messaging
 
 ## Installation
 
