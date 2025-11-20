@@ -1,0 +1,45 @@
+{
+  "agent_id": 1,
+  "best": [
+    [
+      0
+    ],
+    [
+      2
+    ],
+    [
+      2
+    ],
+    [
+      0
+    ],
+    [
+      0
+    ],
+    [
+      2
+    ],
+    [
+      2
+    ]
+  ],
+  "matches": [
+    true,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false
+  ],
+  "schedule": [
+    0,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1
+  ],
+  "status": "partial"
+}

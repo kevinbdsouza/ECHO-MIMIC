@@ -1,28 +1,30 @@
 ECHO Stage 2 (Imitation) — Agent {agent_id}
 ==========================================
 
-Scenario id: {scenario_id}
-Slots (index → hour): {slots}
-Retail tariff ($/kWh): {price}
-Grid carbon intensity (gCO2/kWh): {carbon}
-Feeder capacity (kW equivalent): {capacity}
-Baseline non-EV load (kW): {baseline}
-Minimum EV sessions per slot: {slot_minimums}
-Maximum EV sessions per slot: {slot_maximums}
-Spatial carbon gradient (location → gCO2/kWh): {spatial_carbon_summary}
-7-day feeder outlook:
-{daily_conditions}
+Goal: choose the slot that you think the agents would follow according to their personal objectives. Don't worry about global goals like carbon or congestion unless dictated by your personality.
+
+Forecast note: observed tariffs, baseline load, and carbon intensity may drift by up to ±20% from the values below because of real-world noise.
+
+scenario_id: {scenario_id}
+slots: {slots}
+price: {price}
+carbon_intensity: {carbon_intensity}
+capacity: {capacity}
+baseline_load: {baseline_load}
+slot_min_sessions: {slot_min_sessions}
+slot_max_sessions: {slot_max_sessions}
+spatial_carbon: {spatial_carbon}
+days:
+{days}
 
 Your profile
 ------------
-Persona: {persona}
-Feeder location: {agent_location}
-Base demand per slot: {base_demand}
-Preferred slots: {preferred_slots}
-Comfort penalty when deviating: {comfort_penalty}
+persona: {persona}
+location: {location}
+base_demand: {base_demand}
 
-Observed neighbour exemplars
-----------------------------
+neighbor_examples
+-----------------
 {neighbor_examples}
 
 Task
@@ -38,5 +40,4 @@ Constraints
 • Use only the information in this prompt. Other agents' private data must remain hidden.
 • Preserve the JSON output format and keep the payload to a list of seven integers.
 • Do not attempt to coordinate with non-neighbour agents at this stage.
-• ``scenario.json`` resides two directories up (``../../scenario.json``) from this agent folder—derive paths programmatically.
 • Respond with only valid Python code representing the full contents of ``policy.py``; do not include commentary or markdown fences.

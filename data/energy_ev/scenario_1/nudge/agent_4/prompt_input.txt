@@ -3,31 +3,423 @@ MIMIC Stage 4 (Nudging) — Agent 4
 
 Persona context
 ---------------
-Position 4 retirees guarding comfort and grid warnings
-
-Neighbour exemplars (still the only observations available)
-----------------------------------------------------------
-- Neighbor 3 → slot 3 (Central nurse dipped into slot 3 when lull hours opened)
-- Neighbor 5 → slot 0 (Student picked slot 0 to avoid wasting the required slot)
+persona: Position 4 retirees guarding comfort and grid warnings
+location: 4
+base_demand: 0.90, 0.60, 0.70, 0.80
 
 Current heuristics snapshot
 ---------------------------
 Local imitation code:
-    # Local policy for agent 4 not yet evolved
+# This is what the agent is currently following for personal goals
+    import json
+    import os
+
+    class AgentPolicy:
+        def __init__(self, persona, location, base_demand, neighbor_examples, scenario_context):
+            self.persona = persona
+            self.location = location
+            self.base_demand = base_demand
+            self.neighbor_examples = neighbor_examples
+            self.scenario_context = scenario_context
+        
+            # Agent 4: Position 4 retirees guarding comfort and grid warnings.
+            # Prioritize comfort (high base demand in early slots 0, 1) and 
+            # be wary of grid warnings (high carbon/price).
+            # Base demand: 0.90, 0.60, 0.70, 0.80 -> Heaviest in Slot 0 (19-20h)
+            self.slot_weights = [1.5, 0.8, 0.7, 1.0] # Higher weight for comfort (Slot 0)
+
+        def calculate_cost(self, day_data, slot_index):
+            tariff = day_data['Tariff'][slot_index]
+            carbon = day_data['Carbon'][slot_index]
+        
+            # Spatial carbon for location 4
+            spatial_carbon_str = day_data['Spatial carbon'][self.location - 1]
+            spatial_carbon_values = [int(x) for x in spatial_carbon_str.split(', ')]
+            spatial_carbon = spatial_carbon_values[slot_index]
+        
+            comfort_factor = self.slot_weights[slot_index]
+        
+            # Cost components:
+            # Agent 4 values comfort highly (Slot 0 preferred due to high weight/low inverse weight).
+            # Carbon is secondary concern ("grid warnings").
+        
+            cost = (
+                tariff * 1.0 +              # Price (Primary cost)
+                carbon * 0.001 +            # Carbon (Secondary concern)
+                (1 / comfort_factor) * 0.5  # Comfort: Lower cost means higher preference (Slot 0 minimizes this term)
+            )
+        
+            return cost
+
+        def choose_slots(self):
+            days_data = self.scenario_context['days']
+            all_slots = list(range(len(self.scenario_context['price'])))
+        
+            chosen_slots = []
+        
+            for day_name in days_data:
+                day_data = days_data[day_name]
+            
+                best_slot = -1
+                min_cost = float('inf')
+            
+                slot_maxs = self.scenario_context['slot_max_sessions']
+
+                possible_slots = []
+                for i in all_slots:
+                    # Check if participation is allowed (max sessions must be >= 1)
+                    if slot_maxs[i] >= 1:
+                        possible_slots.append(i)
+
+            
+                for slot_index in possible_slots:
+                    cost = self.calculate_cost(day_data, slot_index)
+                
+                    if cost < min_cost:
+                        min_cost = cost
+                        best_slot = slot_index
+            
+                # Safety check for specific Day 6 constraint mentioned in prompt for Slot 2 rationing:
+                if "Day 6" in day_name and best_slot == 2:
+                     # If slot 2 was cheapest but is rationed, prioritize Slot 0 (highest comfort preference) 
+                     # if its cost is within a reasonable tolerance (20%) of the actual minimum cost found.
+                     cost_slot_0 = self.calculate_cost(day_data, 0)
+                     if cost_slot_0 < min_cost * 1.2: 
+                         best_slot = 0
+            
+                if best_slot == -1:
+                    # Fallback: choose Slot 0 (highest comfort priority)
+                    best_slot = 0 
+            
+                chosen_slots.append(best_slot)
+            
+            return chosen_slots
+
+    if __name__ == '__main__':
+        # --- Scenario Context Definition ---
+        scenario_context = {
+            'slots': {0: '19-20', 1: '20-21', 2: '21-22', 3: '22-23'},
+            'price': [0.23, 0.24, 0.27, 0.30],
+            'carbon_intensity': [700, 480, 500, 750],
+            'capacity': 6.8,
+            'baseline_load': [5.2, 5.0, 4.9, 6.5],
+            'slot_min_sessions': {0: 1, 1: 1, 2: 1, 3: 1},
+            'slot_max_sessions': {0: 2, 1: 2, 2: 1, 3: 2},
+            'spatial_carbon': {
+                1: '440, 460, 490, 604', 
+                2: '483, 431, 471, 600', 
+                3: '503, 473, 471, 577', 
+                4: '617, 549, 479, 363', 
+                5: '411, 376, 554, 623'
+            },
+            'days': {
+                "Day 1 (Day 1 — Clear start to the week with feeders expecting full-slot coverage.)": {
+                    "Tariff": [0.20, 0.25, 0.29, 0.32], "Carbon": [490, 470, 495, 540], 
+                    "Baseline load": [5.3, 5.0, 4.8, 6.5], 
+                    "Spatial carbon": ["330, 520, 560, 610", "550, 340, 520, 600", "590, 520, 340, 630", "620, 560, 500, 330", "360, 380, 560, 620"]
+                },
+                "Day 2 (Day 2 — Evening wind ramps mean slots 0 and 3 must balance transformer temps.)": {
+                    "Tariff": [0.27, 0.22, 0.24, 0.31], "Carbon": [485, 460, 500, 545], 
+                    "Baseline load": [5.1, 5.2, 4.9, 6.6], 
+                    "Spatial carbon": ["510, 330, 550, 600", "540, 500, 320, 610", "310, 520, 550, 630", "620, 540, 500, 340", "320, 410, 560, 640"]
+                },
+                "Day 3 (Day 3 — Marine layer shifts low-carbon pocket to the early slots.)": {
+                    "Tariff": [0.24, 0.21, 0.26, 0.30], "Carbon": [500, 455, 505, 550], 
+                    "Baseline load": [5.4, 5.0, 4.9, 6.4], 
+                    "Spatial carbon": ["540, 500, 320, 600", "320, 510, 540, 600", "560, 330, 520, 610", "620, 560, 500, 330", "330, 420, 550, 640"]
+                },
+                "Day 4 (Day 4 — Neighborhood watch enforces staggered use before the late-event recharge.)": {
+                    "Tariff": [0.19, 0.24, 0.28, 0.22], "Carbon": [495, 470, 500, 535], 
+                    "Baseline load": [5.0, 5.1, 5.0, 6.7], 
+                    "Spatial carbon": ["320, 520, 560, 600", "550, 330, 520, 580", "600, 540, 500, 320", "560, 500, 330, 540", "500, 340, 560, 630"]
+                },
+                "Day 5 (Day 5 — Festival lighting brings high-carbon spikes after 22h.)": {
+                    "Tariff": [0.23, 0.20, 0.27, 0.31], "Carbon": [500, 450, 505, 545], 
+                    "Baseline load": [5.2, 5.3, 5.0, 6.6], 
+                    "Spatial carbon": ["510, 330, 560, 600", "560, 500, 320, 590", "320, 520, 540, 620", "630, 560, 510, 340", "330, 420, 560, 630"]
+                },
+                "Day 6 (Day 6 — Maintenance advisory caps the valley transformer; slot 2 is rationed.)": {
+                    "Tariff": [0.26, 0.22, 0.25, 0.29], "Carbon": [505, 460, 495, 540], 
+                    "Baseline load": [5.5, 5.2, 4.8, 6.5], 
+                    "Spatial carbon": ["540, 500, 320, 610", "320, 510, 560, 620", "560, 340, 520, 610", "640, 560, 510, 330", "520, 330, 540, 600"]
+                },
+                "Day 7 (Day 7 — Cool front eases late-night load but upstream carbon stays elevated.)": {
+                    "Tariff": [0.21, 0.23, 0.28, 0.26], "Carbon": [495, 460, 500, 530], 
+                    "Baseline load": [5.1, 4.9, 4.8, 6.3], 
+                    "Spatial carbon": ["330, 520, 560, 610", "540, 330, 520, 600", "580, 540, 330, 620", "630, 560, 500, 330", "520, 330, 550, 600"]
+                }
+            }
+        }
+    
+        # Agent 4 profile
+        persona = "Position 4 retirees guarding comfort and grid warnings"
+        location = 4
+        base_demand = [0.90, 0.60, 0.70, 0.80]
+        neighbor_examples = [
+            {'position': 3, 'base_demand': [0.60, 0.80, 0.90, 0.70], 'preferred_slots': [1, 3], 'comfort_penalty': 0.20},
+            {'position': 5, 'base_demand': [0.50, 0.70, 0.60, 0.90], 'preferred_slots': [0, 1], 'comfort_penalty': 0.12}
+        ]
+
+        agent = AgentPolicy(persona, location, base_demand, neighbor_examples, scenario_context)
+        daily_slot_plan = agent.choose_slots()
+
+        # Output to local_policy_output.json
+        output_filename = "local_policy_output.json"
+        with open(output_filename, 'w') as f:
+            json.dump(daily_slot_plan, f, indent=4)
 
 Global coordination code:
-    # Global policy for agent 4 not yet evolved
+# This is what the agent should follow for common global goals
+    import json
+    import os
+    from typing import List, Dict, Any, Tuple
+
+    class Policy:
+        def __init__(self, scenario_data: Dict[str, Any], agent_id: int):
+            self.scenario = scenario_data
+            self.agent_id = agent_id
+            self.slot_indices = list(range(len(self.scenario['slots'])))
+        
+            # Agent-specific configuration extraction
+            self.location_idx = self.scenario['agent_id_to_location'][str(agent_id)]
+        
+            # Base demand (kW) for this agent across the 4 slots
+            self.base_demand = self.scenario['base_demand']
+        
+            # Coordination parameters
+            self.alpha = self.scenario['alpha']  # Carbon/Price sensitivity
+            self.beta = self.scenario['beta']    # Neighbor interaction weight
+            self.gamma = self.scenario['gamma']  # Local comfort/Capacity sensitivity
+
+            # Neighbor data (Assuming we can access neighbor examples based on location/ID proximity)
+            self.neighbors = self._parse_neighbor_examples(self.scenario['neighbor_examples'])
+
+            # Scenario context (for reference, though this policy focuses on lookahead)
+            self.scenario_context = {
+                'capacity': self.scenario['capacity'],
+                'time_prices': self.scenario['price'],
+                'time_carbon': self.scenario['carbon_intensity']
+            }
+
+        def _parse_neighbor_examples(self, neighbor_examples: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+            parsed = {}
+            for ex in neighbor_examples:
+                name_parts = ex['Position'].split()
+                parsed[name_parts[1]] = ex  # Key by position number e.g., '3', '5'
+            return parsed
+
+        def _get_day_data(self, day_name: str) -> Dict[str, List[float]]:
+            """Extracts tariff, carbon, baseline load, and spatial carbon for a specific day."""
+            day_data = {}
+            # Find the matching day entry in the scenario data
+            target_day = next(
+                (day for day in self.scenario['days'] if day_name in day), None
+            )
+        
+            if not target_day:
+                raise ValueError(f"Could not find data for {day_name}")
+
+            day_key = list(target_day.keys())[0]
+            data = target_day[day_key]
+        
+            # Parse lists from strings
+            day_data['tariff'] = [float(x) for x in data['Tariff'].split(', ')]
+            day_data['carbon'] = [float(x) for x in data['Carbon'].split(', ')]
+            day_data['baseline_load'] = [float(x) for x in data['Baseline load'].split(', ')]
+        
+            # Spatial carbon parsing: We need the data for *our* location index
+            spatial_carbon_str = data['Spatial carbon'].split(';')[self.location_idx - 1]
+            # spatial_carbon_str format: "1: 330, 520, 560, 610"
+        
+            # Extract the 4 slot values relevant to this agent's location
+            slot_values_str = spatial_carbon_str.split(': ')[1]
+            day_data['spatial_carbon'] = [float(x) for x in slot_values_str.split(', ')]
+        
+            return day_data
+
+        def _calculate_slot_score(self, day_idx: int, slot_idx: int, day_data: Dict[str, List[float]]) -> float:
+            """
+            Calculates a combined cost/benefit score for a specific slot on a specific day.
+            Lower score is better (lower cost/higher benefit).
+        
+            Score = alpha * Normalized_Cost + gamma * Normalized_Load_Impact + beta * Neighbor_Coordination
+            """
+        
+            # --- 1. Local Objective (Cost Minimization) ---
+        
+            # Cost components (Price and Carbon Intensity for the day/slot)
+            price = day_data['tariff'][slot_idx]
+            carbon = day_data['carbon'][slot_idx]
+        
+            # Normalize Cost using scenario context for relative comparison across days
+            norm_price = price / self.scenario_context['time_prices'][slot_idx]
+            norm_carbon = carbon / self.scenario_context['time_carbon'][slot_idx]
+        
+            cost_score = (norm_price + norm_carbon) / 2.0
+
+            # --- 2. Local Objective (Congestion/Comfort) ---
+        
+            # Capacity constraint based score (Penalize high local use relative to baseline/capacity)
+            capacity = self.scenario_context['capacity']
+            baseline = day_data['baseline_load'][slot_idx]
+            agent_load = self.base_demand[slot_idx]
+            spatial_congestion = day_data['spatial_carbon'][slot_idx]
+        
+            # Heuristic for local impact: Combine agent's own load with neighbor spatial impact
+            # High spatial carbon implies high congestion or dirty power source at that location/time.
+        
+            # Load impact: Penalize slots where baseline + agent load is close to capacity OR spatial carbon is high
+            load_factor = (baseline + agent_load) / capacity
+        
+            # Penalize high spatial congestion severely (as per persona: comfort/grid warnings)
+            # We scale spatial congestion based on the maximum observed spatial carbon in the scenario context, 
+            # although using the day's max is more dynamic. Let's use the day's max for normalization against other slots *on that day*.
+            max_spatial_carbon_day = max(day_data['spatial_carbon'])
+            norm_spatial_carbon = spatial_carbon / max_spatial_carbon_day if max_spatial_carbon_day > 0 else 0
+
+            # Gamma heavily weights local comfort/congestion factors
+            congestion_score = (load_factor * 0.5) + (norm_spatial_carbon * 0.5)
+
+            # --- 3. Coordination Objective ---
+        
+            # Analyze neighbor preferences. We want to avoid their preferred slots if they conflict with our local goals, 
+            # OR we can aim to align if they are trying to solve a major global issue (like lowest carbon).
+        
+            neighbor_penalty = 0.0
+        
+            # Look at explicit neighbor preferences (assuming the agent knows neighbor profiles from history/context)
+            for neighbor_id, n_data in self.neighbors.items():
+                pref_slots = n_data.get('Preferred slots', [])
+            
+                if slot_idx in pref_slots:
+                    # If slot is preferred by a neighbor, apply a small adjustment (neutralizing penalty for simplicity in this lookahead)
+                    # For Stage 3 collective, the goal is *not* to rigidly avoid, but to be aware.
+                    # If neighbors prefer low-cost slots, this might increase our cost. We apply a mild cost offset.
+                    neighbor_penalty += self.beta * 0.1
+        
+            # Look at actual historical behavior (Ground Truth)
+            # If a neighbor historically chose a slot, this slot might be "important" for them or the grid state they anticipate.
+            # Penalize slots that neighbors frequently chose (as they might be draining a shared resource or capacity).
+        
+            historical_weight = 0.0
+            for neighbor_id, n_data in self.neighbors.items():
+                # We need the recommendation for this specific day (Day index 0-6 maps to Day 1-7)
+                gt_key = f"Day {day_idx + 1}"
+                if gt_key in n_data.get('Ground truth min-cost slots by day', {}):
+                    if slot_idx in n_data['Ground truth min-cost slots by day'][gt_key]:
+                        historical_weight += self.beta * 0.2 # Slightly higher weight for observed past behavior
+
+            neighbor_penalty += historical_weight
+        
+            # --- Final Score ---
+        
+            # Weights: Alpha for environment cost, Gamma for local congestion, Beta for social awareness
+            final_score = (
+                self.alpha * cost_score +
+                self.gamma * congestion_score +
+                neighbor_penalty
+            )
+        
+            # Apply slot constraints (Min/Max Sessions are usually handled during scheduling, but here we use them as soft constraints via high penalty)
+            min_sessions = self.scenario['slot_min_sessions'][f'slot_{slot_idx}']
+            max_sessions = self.scenario['slot_max_sessions'][f'slot_{slot_idx}']
+
+            # Since we are only recommending *one* slot per day, we only use min/max sessions for context, 
+            # assuming the scheduler will check these against the 7-day plan later. For scoring one day, we focus on cost/comfort.
+
+            return final_score
+
+        def recommend_slots(self) -> List[int]:
+            """Calculates the recommended slot for each of the 7 days."""
+        
+            recommendations = []
+        
+            # Iterate through Day 1 to Day 7 (indices 0 to 6)
+            day_names = [f"Day {i+1} ({self.scenario['days'][i].get(list(self.scenario['days'][i].keys())[0]).split(')')[0].split(' — ')[1]})" 
+                         for i in range(7)]
+
+            for day_idx, day_name in enumerate(day_names):
+                try:
+                    day_data = self._get_day_data(day_name)
+                except ValueError as e:
+                    print(f"Error processing {day_name}: {e}")
+                    # Fallback: Use scenario context averages if day data is missing
+                    day_data = {
+                        'tariff': self.scenario_context['time_prices'],
+                        'carbon': self.scenario_context['time_carbon'],
+                        'baseline_load': self.scenario['baseline_load'],
+                        'spatial_carbon': [0.0] * 4 # Cannot calculate without specific spatial data
+                    }
+                    # If data fails, rely heavily on global time prices/carbon
+                
+            
+                best_slot = -1
+                min_score = float('inf')
+            
+                slot_scores = {}
+            
+                for slot_idx in self.slot_indices:
+                    score = self._calculate_slot_score(day_idx, slot_idx, day_data)
+                    slot_scores[slot_idx] = score
+                
+                    if score < min_score:
+                        min_score = score
+                        best_slot = slot_idx
+            
+                # Post-selection check: Ensure we didn't pick an impossible slot (although constraints are soft here)
+                if best_slot == -1:
+                    # Should not happen if slots are 0-3, but as safety, pick the cheapest slot based on scenario context price
+                    default_slot = min(enumerate(self.scenario_context['time_prices']), key=lambda x: x[1])[0]
+                    best_slot = default_slot
+
+                recommendations.append(best_slot)
+
+            return recommendations
+
+    def main():
+        # 1. Load scenario data
+        try:
+            # Assuming policy.py is run from the agent's directory containing scenario.json
+            with open('scenario.json', 'r') as f:
+                scenario_data = json.load(f)
+        except FileNotFoundError:
+            print("Error: scenario.json not found in the current directory.")
+            return
+
+        # Determine Agent ID (Crucial for locating agent-specific data)
+        # In a real system, this might be an environment variable. Here we deduce it 
+        # based on the common structure where Agent 4 corresponds to position 4 data.
+        # We check the scenario to find the mapping, but since the prompt specifies Agent 4, we hardcode for safety.
+        AGENT_ID = 4
+    
+        # 2. Decide on slot recommendations
+        policy = Policy(scenario_data, AGENT_ID)
+        recommendations = policy.recommend_slots()
+    
+        # 3. Write global_policy_output.json
+        output_data = {
+            "agent_id": AGENT_ID,
+            "location": policy.location_idx,
+            "recommendations": [
+                {"day": i + 1, "slot": rec} for i, rec in enumerate(recommendations)
+            ]
+        }
+    
+        with open('global_policy_output.json', 'w') as f:
+            json.dump(output_data, f, indent=4)
+
+    if __name__ == "__main__":
+        main()
 
 Task
 ----
 Create a JSON object with keys ``persona``, ``recommended_slots`` (seven daily indices), and ``message`` that nudges this persona
 from their local behaviour towards the coordinated recommendation implied by the global heuristic above.
-Ground your message entirely on what you can infer from the two policy snippets and the limited neighbour context.
+Ground your message entirely on what you can infer from the two policy snippets. Be persuasive and convincing.
 
 Guidelines
 ----------
 • Keep the message under 120 words and provide tangible energy or carbon benefits.
 • Respect the agent's preferences and comfort penalties when framing the request.
-• Do not reference agents or information outside the neighbourhood evidence shown.
+• You can use the choice architecture and economic incentives within budget.
 • Respond with a valid, minified JSON object string only—no extra prose or markdown.
-

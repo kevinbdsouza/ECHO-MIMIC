@@ -44,8 +44,19 @@ class CommandOutputCapture:
             stderr=subprocess.PIPE if capture_stderr else None,
             universal_newlines=True,
         ) as process:
-            stdout, stderr = process.communicate()
-            return_code = process.returncode
+            try:
+                stdout, stderr = process.communicate(timeout=20)
+                return_code = process.returncode
+            except subprocess.TimeoutExpired as exc:
+                process.kill()
+                stdout, stderr = process.communicate()
+                timeout_msg = f"Command timed out after {exc.timeout} seconds"
+                self.logger.warning(timeout_msg)
+                if capture_stderr:
+                    stderr = (stderr or "") + (("\n" if stderr else "") + timeout_msg)
+                else:
+                    stdout = (stdout or "") + (("\n" if stdout else "") + timeout_msg)
+                return_code = process.returncode or 124
 
         if return_code:
             self.logger.info("Command returned with code: %s", return_code)

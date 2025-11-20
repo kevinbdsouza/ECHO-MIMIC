@@ -1,0 +1,238 @@
+{
+  "scenario_id": "ev_peak_sharing_1",
+  "description": "Five households coordinate EV charging across four constrained slots with per-agent positions driving spatial carbon intensity and slot-level usage caps that force full coverage.",
+  "slots": ["19-20", "20-21", "21-22", "22-23"],
+  "capacity": 6.8,
+  "baseline_load": [5.2, 5.0, 4.9, 6.5],
+  "price": [0.23, 0.24, 0.27, 0.30],
+  "carbon_intensity": [700, 480, 500, 750],
+  "slot_min_sessions": [1, 1, 1, 1],
+  "slot_max_sessions": [2, 2, 1, 2],
+  "days": [
+    {
+      "name": "Day 1",
+      "note": "Clear start to the week with feeders expecting full-slot coverage.",
+      "baseline_load": [5.3, 5.0, 4.8, 6.5],
+      "price": [0.20, 0.25, 0.29, 0.32],
+      "carbon_intensity": [490, 470, 495, 540],
+      "spatial_carbon": {
+        "1": [330, 520, 560, 610],
+        "2": [550, 340, 520, 600],
+        "3": [590, 520, 340, 630],
+        "4": [620, 560, 500, 330],
+        "5": [360, 380, 560, 620]
+      }
+    },
+    {
+      "name": "Day 2",
+      "note": "Evening wind ramps mean slots 0 and 3 must balance transformer temps.",
+      "baseline_load": [5.1, 5.2, 4.9, 6.6],
+      "price": [0.27, 0.22, 0.24, 0.31],
+      "carbon_intensity": [485, 460, 500, 545],
+      "spatial_carbon": {
+        "1": [510, 330, 550, 600],
+        "2": [540, 500, 320, 610],
+        "3": [310, 520, 550, 630],
+        "4": [620, 540, 500, 340],
+        "5": [320, 410, 560, 640]
+      }
+    },
+    {
+      "name": "Day 3",
+      "note": "Marine layer shifts low-carbon pocket to the early slots.",
+      "baseline_load": [5.4, 5.0, 4.9, 6.4],
+      "price": [0.24, 0.21, 0.26, 0.30],
+      "carbon_intensity": [500, 455, 505, 550],
+      "spatial_carbon": {
+        "1": [540, 500, 320, 600],
+        "2": [320, 510, 540, 600],
+        "3": [560, 330, 520, 610],
+        "4": [620, 560, 500, 330],
+        "5": [330, 420, 550, 640]
+      }
+    },
+    {
+      "name": "Day 4",
+      "note": "Neighborhood watch enforces staggered use before the late-event recharge.",
+      "baseline_load": [5.0, 5.1, 5.0, 6.7],
+      "price": [0.19, 0.24, 0.28, 0.22],
+      "carbon_intensity": [495, 470, 500, 535],
+      "spatial_carbon": {
+        "1": [320, 520, 560, 600],
+        "2": [550, 330, 520, 580],
+        "3": [600, 540, 500, 320],
+        "4": [560, 500, 330, 540],
+        "5": [500, 340, 560, 630]
+      }
+    },
+    {
+      "name": "Day 5",
+      "note": "Festival lighting brings high-carbon spikes after 22h.",
+      "baseline_load": [5.2, 5.3, 5.0, 6.6],
+      "price": [0.23, 0.20, 0.27, 0.31],
+      "carbon_intensity": [500, 450, 505, 545],
+      "spatial_carbon": {
+        "1": [510, 330, 560, 600],
+        "2": [560, 500, 320, 590],
+        "3": [320, 520, 540, 620],
+        "4": [630, 560, 510, 340],
+        "5": [330, 420, 560, 630]
+      }
+    },
+    {
+      "name": "Day 6",
+      "note": "Maintenance advisory caps the valley transformer; slot 2 is rationed.",
+      "baseline_load": [5.5, 5.2, 4.8, 6.5],
+      "price": [0.26, 0.22, 0.25, 0.29],
+      "carbon_intensity": [505, 460, 495, 540],
+      "spatial_carbon": {
+        "1": [540, 500, 320, 610],
+        "2": [320, 510, 560, 620],
+        "3": [560, 340, 520, 610],
+        "4": [640, 560, 510, 330],
+        "5": [520, 330, 540, 600]
+      }
+    },
+    {
+      "name": "Day 7",
+      "note": "Cool front eases late-night load but upstream carbon stays elevated.",
+      "baseline_load": [5.1, 4.9, 4.8, 6.3],
+      "price": [0.21, 0.23, 0.28, 0.26],
+      "carbon_intensity": [495, 460, 500, 530],
+      "spatial_carbon": {
+        "1": [330, 520, 560, 610],
+        "2": [540, 330, 520, 600],
+        "3": [580, 540, 330, 620],
+        "4": [630, 560, 500, 330],
+        "5": [520, 330, 550, 600]
+      }
+    }
+  ],
+  "agents": [
+    {
+      "id": 1,
+      "base_demand": [1.2, 0.7, 0.8, 0.6],
+      "preferred_slots": [0, 2],
+      "comfort_penalty": 0.18,
+      "persona": "Position 1 battery engineer balancing budget and solar backfeed",
+      "location": "1",
+      "neighbor_examples": [
+        {
+          "neighbor_id": 2,
+          "base_demand": [0.7, 1.0, 0.8, 0.5],
+          "preferred_slots": [1, 2],
+          "action": 1,
+          "note": "Analyst neighbor slid to slot 1 to satisfy the slot minima"
+        },
+        {
+          "neighbor_id": 3,
+          "base_demand": [0.6, 0.8, 0.9, 0.7],
+          "preferred_slots": [1, 3],
+          "action": 2,
+          "note": "Central nurse anchored on slot 2 when slot 3 hit capacity"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "base_demand": [0.7, 1.0, 0.8, 0.5],
+      "preferred_slots": [1, 2],
+      "comfort_penalty": 0.14,
+      "persona": "Position 2 feeder analyst prioritising transformer headroom",
+      "location": "2",
+      "neighbor_examples": [
+        {
+          "neighbor_id": 1,
+          "base_demand": [1.2, 0.7, 0.8, 0.6],
+          "preferred_slots": [0, 2],
+          "action": 0,
+          "note": "Battery neighbor grabbed slot 0 when slot 2 hit its max"
+        },
+        {
+          "neighbor_id": 4,
+          "base_demand": [0.9, 0.6, 0.7, 0.8],
+          "preferred_slots": [0, 3],
+          "action": 3,
+          "note": "Position 4 retirees shifted to slot 3 when carbon spiked upstream"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "base_demand": [0.6, 0.8, 0.9, 0.7],
+      "preferred_slots": [1, 3],
+      "comfort_penalty": 0.20,
+      "persona": "Position 3 night-shift nurse on the central ridge",
+      "location": "3",
+      "neighbor_examples": [
+        {
+          "neighbor_id": 2,
+          "base_demand": [0.7, 1.0, 0.8, 0.5],
+          "preferred_slots": [1, 2],
+          "action": 2,
+          "note": "Analyst stayed on slot 2 when feeder stress stayed low"
+        },
+        {
+          "neighbor_id": 5,
+          "base_demand": [0.5, 0.7, 0.6, 0.9],
+          "preferred_slots": [0, 1],
+          "action": 1,
+          "note": "Student tenant mirrored the ridge plan to align with transit"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "base_demand": [0.9, 0.6, 0.7, 0.8],
+      "preferred_slots": [0, 3],
+      "comfort_penalty": 0.16,
+      "persona": "Position 4 retirees guarding comfort and grid warnings",
+      "location": "4",
+      "neighbor_examples": [
+        {
+          "neighbor_id": 3,
+          "base_demand": [0.6, 0.8, 0.9, 0.7],
+          "preferred_slots": [1, 3],
+          "action": 3,
+          "note": "Central nurse dipped into slot 3 when lull hours opened"
+        },
+        {
+          "neighbor_id": 5,
+          "base_demand": [0.5, 0.7, 0.6, 0.9],
+          "preferred_slots": [0, 1],
+          "action": 0,
+          "note": "Student picked slot 0 to avoid wasting the required slot"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "base_demand": [0.5, 0.7, 0.6, 0.9],
+      "preferred_slots": [0, 1],
+      "comfort_penalty": 0.12,
+      "persona": "Position 5 graduate tenant commuting late from campus",
+      "location": "5",
+      "neighbor_examples": [
+        {
+          "neighbor_id": 4,
+          "base_demand": [0.9, 0.6, 0.7, 0.8],
+          "preferred_slots": [0, 3],
+          "action": 3,
+          "note": "Retirees stayed in slot 3 to watch overnight voltage"
+        },
+        {
+          "neighbor_id": 1,
+          "base_demand": [1.2, 0.7, 0.8, 0.6],
+          "preferred_slots": [0, 2],
+          "action": 2,
+          "note": "Battery neighbor flexed to slot 2 when carbon dipped there"
+        }
+      ]
+    }
+  ],
+  "weights": {
+    "alpha": 40.0,
+    "beta": 0.50,
+    "gamma": 12.0
+  }
+}

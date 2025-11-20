@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import re
 from typing import Callable
 
 from ..rate_limiter import RateLimiter, send_message_with_retry
 
-from .text_utils import extract_python_code
+from .text_utils import extract_python_code, strip_code_fences
+
+
+_MODEL_ARTIFACT_RE = re.compile(r"<ctrl\d+>")
+
+
+def _clean_fixed_code(raw_text: str, extractor: Callable[[str], str]) -> str:
+    code = extractor(raw_text) or raw_text
+    code = strip_code_fences(code)
+    code = _MODEL_ARTIFACT_RE.sub("", code)
+    return code.strip()
 
 
 def fix_with_model(
@@ -34,7 +45,7 @@ def fix_with_model(
 
     completion = send_message_with_retry(session, prompt, rate_limiter)
     response = completion.parts[0].text
-    return code_extractor(response)
+    return _clean_fixed_code(response, code_extractor)
 
 
 __all__ = ["fix_with_model"]

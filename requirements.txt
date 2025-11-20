@@ -1,7 +1,7 @@
 # ECHO-MIMIC Project Dependencies
 
 # Core ML and AI frameworks
-dspy-ai
+dspy
 google-generativeai
 openai
 

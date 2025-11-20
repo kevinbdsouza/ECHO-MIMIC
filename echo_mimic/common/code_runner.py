@@ -54,8 +54,8 @@ def validate_python_code(
     script_name: str = "temp_fix.py",
     max_attempts: int = 2,
     copy_template: bool = True,
-    input_template: str = "input_cp.geojson",
-    input_target: str = "input.geojson",
+    input_template: str = "scenario_cp.json",
+    input_target: str = "scenario.json",
     pre_run: Optional[Callable[[Path], None]] = None,
 ) -> Optional[str]:
     """Run ``code`` inside ``workdir`` and optionally fix failures via ``fixer``.

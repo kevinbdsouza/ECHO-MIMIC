@@ -1,0 +1,112 @@
+[
+  {
+    "score": 0.0,
+    "trajectory": [
+      "init(0.0000)"
+    ],
+    "counts": {
+      "init": 1,
+      "mutate": 0,
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "init": 0.0,
+      "mutate": 0.0,
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "reflect": 0.0
+    }
+  },
+  {
+    "score": 0.0,
+    "trajectory": [
+      "init(0.0000)"
+    ],
+    "counts": {
+      "init": 1,
+      "mutate": 0,
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "init": 0.0,
+      "mutate": 0.0,
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "reflect": 0.0
+    }
+  },
+  {
+    "score": 0.0,
+    "trajectory": [
+      "init(0.0000)"
+    ],
+    "counts": {
+      "init": 1,
+      "mutate": 0,
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "init": 0.0,
+      "mutate": 0.0,
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "reflect": 0.0
+    }
+  },
+  {
+    "score": 0.0,
+    "trajectory": [
+      "init(0.0000)"
+    ],
+    "counts": {
+      "init": 1,
+      "mutate": 0,
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "init": 0.0,
+      "mutate": 0.0,
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "reflect": 0.0
+    }
+  },
+  {
+    "score": 0.0,
+    "trajectory": [
+      "init(0.0000)"
+    ],
+    "counts": {
+      "init": 1,
+      "mutate": 0,
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "init": 0.0,
+      "mutate": 0.0,
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "reflect": 0.0
+    }
+  }
+]

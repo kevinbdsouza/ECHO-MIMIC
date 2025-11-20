@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Sequence
 
 import google.generativeai as genai
 
@@ -13,6 +14,7 @@ from echo_mimic.common import (
     CommandOutputCapture,
     extract_python_code,
     make_code_validator,
+    strip_code_fences,
 )
 from echo_mimic.common.operators import (
     make_operator_counts,
@@ -34,6 +36,17 @@ def _completion_text(completion: genai.types.GenerateContentResponse) -> str:
     return "\n".join(parts)
 
 
+_MODEL_ARTIFACT_RE = re.compile(r"<ctrl\d+>")
+
+
+def _clean_policy_code(raw_text: str) -> str:
+    """Normalize model output by stripping fences and stray control tokens."""
+    code = extract_python_code(raw_text) or raw_text
+    code = strip_code_fences(code)
+    code = _MODEL_ARTIFACT_RE.sub("", code)
+    return code.strip()
+
+
 @dataclass
 class EnergyPolicyContext:
     """Immutable configuration used by the runner."""
@@ -45,7 +58,7 @@ class EnergyPolicyContext:
     evaluator: Callable[[str], tuple[float, Dict[str, object]]]
     heur_model: genai.GenerativeModel
     fix_model: genai.GenerativeModel
-    rate_limiter
+    rate_limiter: Any
     script_name: str = "policy.py"
 
 
@@ -120,8 +133,7 @@ class EnergyPolicyEvolutionRunner:
                 reflect_children = self._evaluate_population(reflect_children)
                 offspring.extend(reflect_children)
 
-            combined = self._select_population(population + offspring, population_size)
-            population = combined
+            population = self._select_population(offspring, population_size)
             history.append(self._snapshot(population, generation))
 
             self._write_population(population)
@@ -141,27 +153,36 @@ class EnergyPolicyEvolutionRunner:
         children: List[Dict[str, object]] = []
         if not population:
             return children
-        operator_cycle = ("mutate", "crossover", "evolve_1", "evolve_2")
-        while len(children) < inner_loop_size:
-            op_name = operator_cycle[len(children) % len(operator_cycle)]
-            try:
-                if op_name == "mutate":
-                    parent = self._rng.choice(population)
-                    child = self._apply_mutate(parent)
-                else:
-                    parent1 = self._rng.choice(population)
-                    parent2 = self._rng.choice(population)
-                    if op_name == "crossover":
-                        child = self._apply_crossover(parent1, parent2)
-                    elif op_name == "evolve_1":
-                        child = self._apply_evolve(parent1, parent2, explore_new=True)
-                    else:
-                        child = self._apply_evolve(parent1, parent2, explore_new=False)
-                children.append(child)
-            except Exception as exc:  # pragma: no cover - defensive
-                # Skip failed operator invocations but keep the loop running
-                print(f"[warn] operator {op_name} failed: {exc}")
-                continue
+
+        # Always carry forward the original population so selection can choose
+        # between baseline and modified policies each generation.
+        for parent in population:
+            children.append(
+                {
+                    "code": parent["code"],
+                    "score": 0.0,
+                    "counts": parent["counts"].copy(),
+                    "fitness_deltas": parent["fitness_deltas"].copy(),
+                    "trajectory": parent["trajectory"][:],
+                }
+            )
+
+        # For each inner loop slot, generate all operator variants.
+        for _ in range(inner_loop_size):
+            parent1 = self._rng.choice(population)
+            parent2 = self._rng.choice(population)
+            for op_name, builder in (
+                ("mutate", lambda: self._apply_mutate(parent1)),
+                ("crossover", lambda: self._apply_crossover(parent1, parent2)),
+                ("evolve_1", lambda: self._apply_evolve(parent1, parent2, explore_new=True)),
+                ("evolve_2", lambda: self._apply_evolve(parent1, parent2, explore_new=False)),
+            ):
+                try:
+                    children.append(builder())
+                except Exception as exc:  # pragma: no cover - defensive
+                    print(f"[warn] operator {op_name} failed: {exc}")
+                    continue
+
         return children
 
     def _apply_mutate(self, parent: Dict[str, object]) -> Dict[str, object]:
@@ -291,8 +312,7 @@ class EnergyPolicyEvolutionRunner:
         session = self._context.heur_model.start_chat(history=[])
         completion = send_message_with_retry(session, prompt, self._context.rate_limiter)
         response_text = _completion_text(completion)
-        code = extract_python_code(response_text) or response_text
-        code = code.strip()
+        code = _clean_policy_code(response_text)
         if not code:
             raise RuntimeError("LLM produced empty policy code")
         return self._validator(code, script_name=self._context.script_name, max_attempts=2)
@@ -361,6 +381,7 @@ class EnergyPolicyEvolutionRunner:
         entry = {
             "generation": generation,
             "population_size": len(population),
+            "score": best["score"] if best else None,
             "best_score": best["score"] if best else None,
             "mean_score": statistics.fmean(scores) if scores else None,
             "best_detail": best.get("detail") if best else None,

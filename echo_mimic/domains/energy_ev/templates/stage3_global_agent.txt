@@ -1,35 +1,36 @@
 ECHO Stage 3 (Collective) — Agent {agent_id}
 ===========================================
 
-Scenario id: {scenario_id}
-Slots (index → hour): {slots}
-Feeder capacity: {capacity}
-Baseline load: {baseline}
-Carbon intensity: {carbon}
-Minimum EV sessions per slot: {slot_minimums}
-Maximum EV sessions per slot: {slot_maximums}
-Spatial carbon gradient (location → gCO2/kWh): {spatial_carbon_summary}
-7-day feeder outlook:
-{daily_conditions}
-Weights: α={alpha}, β={beta}, γ={gamma}
+scenario_id: {scenario_id}
+slots: {slots}
+price: {price}
+carbon_intensity: {carbon_intensity}
+capacity: {capacity}
+baseline_load: {baseline_load}
+slot_min_sessions: {slot_min_sessions}
+slot_max_sessions: {slot_max_sessions}
+spatial_carbon: {spatial_carbon}
+days:
+{days}
+alpha: {alpha}
+beta: {beta}
+gamma: {gamma}
+
+Forecast note: actual tariffs, carbon intensity, and baseline load may vary by up to ±20% from the values shown because of measurement noise.
 
 Your profile
 ------------
-Persona: {persona}
-Feeder location: {agent_location}
-Base demand per slot: {base_demand}
-Preferred slots: {preferred_slots}
-Comfort penalty baseline: {comfort_penalty}
+persona: {persona}
+location: {location}
+base_demand: {base_demand}
 
-Neighbour observations
-----------------------
+neighbor_examples
+-----------------
 {neighbor_examples}
 
 Goal
 ----
-Design Python heuristics that choose a slot for this agent on each of the next seven days to help minimise the global score:
-    score(a) = α * max_t max(0, baseline[t] + EV_count[t] − capacity) + β * carbon_term(a)
-while respecting the fact that you can only observe the neighbours listed above.
+Design Python heuristics that choose a slot for this agent on each of the next seven days to satisfy common global goals (minimize carbon, congestion) and not just personal ones, using only the neighbour information you can observe.
 
 Output specification
 --------------------
@@ -43,5 +44,4 @@ Keep reasoning local
 • Do not assume knowledge of non-neighbour households.
 • Explainable heuristics that can be combined with other agents will be favoured downstream.
 • Your output will be compared against the globally optimal allocation for this agent.
-• ``scenario.json`` is available at ``../../scenario.json`` relative to this directory—resolve it programmatically.
 • Return only the Python source of ``policy.py``; omit explanations, markdown, or additional text.

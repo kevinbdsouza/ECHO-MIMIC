@@ -44,7 +44,11 @@ def strip_code_fences(text: str) -> str:
     """Remove generic triple-backtick fenced blocks from *text*."""
     if not text:
         return ""
-    return _CODE_FENCE_RE.sub(lambda m: m.group(1).strip(), text).strip()
+    stripped = _CODE_FENCE_RE.sub(lambda m: m.group(1).strip(), text)
+    # Some model responses start or end with unmatched ```python / ``` fences.
+    # Strip any remaining fence markers to avoid leaving them in executable code.
+    stripped = stripped.replace("```python", "").replace("```", "")
+    return stripped.strip()
 
 
 __all__ = [

@@ -1,0 +1,43 @@
+{
+  "agent_id": 5,
+  "matches": [
+    true,
+    false,
+    false,
+    true,
+    false,
+    true,
+    true
+  ],
+  "message": "As you usually charge later, your schedule aligns well with staying in Slot 3 (22:00-23:00). For the week, sticking to Slot 3 maximizes your high-demand flexibility while helping local grid stability, as our coordination model shows this slot handles local stress better than earlier times for your location (5). This choice also strongly minimizes high regional carbon emissions across all seven days compared to shifting earlier.",
+  "nudged_schedule": [
+    0,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1
+  ],
+  "objective": 5283.073564898016,
+  "persona": "Position 5 graduate tenant commuting late from campus",
+  "recommended_slots": [
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3
+  ],
+  "status": "partial",
+  "target_slots": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1
+  ]
+}

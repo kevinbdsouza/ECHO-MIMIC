@@ -1,0 +1,3 @@
+neighbor_examples = [
+    # ... dicts ...
+] # <- This should close the list definition

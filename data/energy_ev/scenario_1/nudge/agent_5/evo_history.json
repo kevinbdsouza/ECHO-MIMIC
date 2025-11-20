@@ -1,0 +1,136 @@
+[
+  {
+    "best_detail": {
+      "agent_id": 5,
+      "matches": [
+        true,
+        false,
+        false,
+        true,
+        false,
+        true,
+        false
+      ],
+      "message": "As you usually charge later, your schedule aligns well with staying in Slot 3 (22:00-23:00). For the week, sticking to Slot 3 maximizes your high-demand flexibility while helping local grid stability, as our coordination model shows this slot handles local stress better than earlier times for your location (5). This choice also strongly minimizes high regional carbon emissions across all seven days compared to shifting earlier.",
+      "nudged_schedule": [
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0
+      ],
+      "objective": 5283.073564898016,
+      "persona": "Position 5 graduate tenant commuting late from campus",
+      "recommended_slots": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "status": "partial",
+      "target_slots": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "best_score": 0.42857142857142855,
+    "counts": {
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "init": 1,
+      "mutate": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "init": 0.0,
+      "mutate": 0.0,
+      "reflect": 0.0
+    },
+    "generation": 0,
+    "score": 0.42857142857142855,
+    "trajectory": [
+      "init(0.0000)"
+    ]
+  },
+  {
+    "best_detail": {
+      "agent_id": 5,
+      "matches": [
+        true,
+        false,
+        false,
+        true,
+        false,
+        true,
+        true
+      ],
+      "message": "As you usually charge later, your schedule aligns well with staying in Slot 3 (22:00-23:00). For the week, sticking to Slot 3 maximizes your high-demand flexibility while helping local grid stability, as our coordination model shows this slot handles local stress better than earlier times for your location (5). This choice also strongly minimizes high regional carbon emissions across all seven days compared to shifting earlier.",
+      "nudged_schedule": [
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "objective": 5283.073564898016,
+      "persona": "Position 5 graduate tenant commuting late from campus",
+      "recommended_slots": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "status": "partial",
+      "target_slots": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
+    "best_score": 0.5714285714285714,
+    "counts": {
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "init": 1,
+      "mutate": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "init": 0.0,
+      "mutate": 0.0,
+      "reflect": 0.0
+    },
+    "generation": 1,
+    "score": 0.5714285714285714,
+    "trajectory": [
+      "init(0.0000)"
+    ]
+  }
+]

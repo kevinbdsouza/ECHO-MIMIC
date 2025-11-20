@@ -129,13 +129,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         default=Path("data/energy_ev/scenario_1"),
         help="Directory containing scenario.json and agent subfolders.",
     )
-    parser.add_argument("--agent-id", type=int, required=True, help="Target agent id to optimise.")
-    parser.add_argument("--population-size", type=int, default=8, help="Population size for the ES loop.")
-    parser.add_argument("--generations", type=int, default=8, help="Number of generations to evolve.")
+    parser.add_argument("--agent-id", type=int, default=5, help="Target agent id to optimise.")
+    parser.add_argument("--population-size", type=int, default=5, help="Population size for the ES loop.")
+    parser.add_argument("--generations", type=int, default=1, help="Number of generations to evolve.")
     parser.add_argument(
         "--inner-loop-size",
         type=int,
-        default=16,
+        default=1,
         help="Number of offspring attempts per generation.",
     )
     parser.add_argument("--seed", type=int, default=13, help="Random seed for reproducibility.")

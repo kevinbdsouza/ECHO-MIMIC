@@ -6,7 +6,13 @@ from pathlib import Path
 from textwrap import indent
 from typing import Dict, Sequence
 
-from .scenario import DayProfile, EVScenario
+from .scenario import (
+    AgentConfig,
+    DayProfile,
+    EVScenario,
+    enumerate_global_optimum,
+    enumerate_local_optima,
+)
 
 
 def _load_template(name: str) -> str:
@@ -34,7 +40,7 @@ def build_stage_two_prompts(scenario: EVScenario) -> Dict[int, str]:
 def build_stage_three_prompt(scenario: EVScenario, agent_id: int) -> str:
     template = _load_template("stage3_global_agent.txt")
     context = _shared_context(scenario)
-    agent = _agent_block(scenario, agent_id)
+    agent = _agent_block(scenario, agent_id, ground_truth_mode="global")
     return template.format(**context, **agent)
 
 
@@ -50,7 +56,7 @@ def build_stage_four_prompt(
 ) -> str:
     template = _load_template("stage4_nudge_agent.txt")
     context = _shared_context(scenario)
-    agent = _agent_block(scenario, agent_id)
+    agent = _agent_block(scenario, agent_id, ground_truth_mode="global")
     policy_context = _policy_context(agent_id, scenario_dir)
     return template.format(**context, **agent, **policy_context)
 
@@ -69,12 +75,6 @@ def build_stage_four_prompts(
 def _stage_one_context(scenario: EVScenario) -> Dict[str, str]:
     agent_lines = []
     for agent in scenario.agents:
-        neighbor_text = "\n".join(
-            f"    - Example with neighbor {ex['neighbor_id']}: slot {ex['action']} ({ex['note']})"
-            for ex in agent.neighbor_examples
-        )
-        if not neighbor_text:
-            neighbor_text = "    - No exemplar context provided"
         agent_lines.append(
             "\n".join(
                 [
@@ -83,7 +83,9 @@ def _stage_one_context(scenario: EVScenario) -> Dict[str, str]:
                     f"  Preferred slots: {list(agent.preferred_slots)}",
                     f"  Comfort penalty: {agent.comfort_penalty}",
                     "  Neighbor ICL:",
-                    neighbor_text,
+                    _format_neighbor_examples(
+                        agent, scenario, indent_level=4, ground_truth_mode="local"
+                    ),
                 ]
             )
         )
@@ -116,32 +118,26 @@ def _shared_context(scenario: EVScenario) -> Dict[str, str]:
             f"{idx}: {label}" for idx, label in enumerate(scenario.slots)
         ),
         "price": ", ".join(f"{val:.2f}" for val in scenario.price),
-        "carbon": ", ".join(f"{val:.0f}" for val in scenario.carbon_intensity),
-        "baseline": ", ".join(f"{val:.1f}" for val in scenario.baseline_load),
+        "carbon_intensity": ", ".join(f"{val:.0f}" for val in scenario.carbon_intensity),
         "capacity": f"{scenario.capacity:.1f}",
+        "baseline_load": ", ".join(f"{val:.1f}" for val in scenario.baseline_load),
         "alpha": f"{scenario.alpha:.2f}",
         "beta": f"{scenario.beta:.2f}",
         "gamma": f"{scenario.gamma:.2f}",
-        "slot_minimums": _format_slot_requirements(scenario.slot_min_sessions),
-        "slot_maximums": _format_slot_requirements(scenario.slot_max_sessions),
-        "spatial_carbon_summary": _spatial_carbon_summary(scenario),
-        "daily_conditions": _daily_conditions_block(scenario),
+        "slot_min_sessions": _format_slot_requirements(scenario.slot_min_sessions),
+        "slot_max_sessions": _format_slot_requirements(scenario.slot_max_sessions),
+        "spatial_carbon": _spatial_carbon_summary(scenario),
+        "days": _daily_conditions_block(scenario),
     }
 
 
-def _agent_block(scenario: EVScenario, agent_id: int) -> Dict[str, str]:
+def _agent_block(
+    scenario: EVScenario, agent_id: int, *, ground_truth_mode: str = "local"
+) -> Dict[str, str]:
     try:
         agent = next(agent for agent in scenario.agents if agent.id == agent_id)
     except StopIteration as exc:  # pragma: no cover - defensive guard
         raise ValueError(f"Unknown agent id {agent_id}") from exc
-
-    if agent.neighbor_examples:
-        neighbor_lines = "\n".join(
-            f"- Neighbor {example['neighbor_id']} → slot {example['action']} ({example['note']})"
-            for example in agent.neighbor_examples
-        )
-    else:
-        neighbor_lines = "- No neighbour exemplars provided"
 
     return {
         "agent_id": str(agent.id),
@@ -149,8 +145,10 @@ def _agent_block(scenario: EVScenario, agent_id: int) -> Dict[str, str]:
         "base_demand": ", ".join(f"{value:.2f}" for value in agent.base_demand),
         "preferred_slots": ", ".join(str(idx) for idx in agent.preferred_slots) or "None",
         "comfort_penalty": f"{agent.comfort_penalty:.2f}",
-        "agent_location": agent.location,
-        "neighbor_examples": neighbor_lines,
+        "location": agent.location,
+        "neighbor_examples": _format_neighbor_examples(
+            agent, scenario, ground_truth_mode=ground_truth_mode
+        ),
     }
 
 
@@ -247,3 +245,74 @@ def _format_spatial_carbon_line(day: DayProfile) -> str:
         for zone, values in sorted(day.spatial_carbon.items())
     )
     return "    Spatial carbon: " + zone_bits
+
+
+def _format_neighbor_examples(
+    agent: AgentConfig,
+    scenario: EVScenario,
+    *,
+    indent_level: int = 0,
+    ground_truth_mode: str = "local",
+) -> str:
+    if ground_truth_mode not in {"local", "global"}:
+        raise ValueError("ground_truth_mode must be 'local' or 'global'")
+
+    agent_map = {neighbor.id: neighbor for neighbor in scenario.agents}
+    if ground_truth_mode == "local":
+        ground_truth_map = enumerate_local_optima(scenario)
+    else:
+        best_allocation, _ = enumerate_global_optimum(scenario)
+        ground_truth_map = {
+            agent.id: [[int(day[idx])] for day in best_allocation]
+            for idx, agent in enumerate(scenario.agents)
+        }
+
+    blocks = []
+    for example in agent.neighbor_examples:
+        neighbor_id = int(example.get("neighbor_id", -1))
+        neighbor = agent_map.get(neighbor_id)
+
+        persona = neighbor.persona if neighbor else str(example.get("persona", "")).strip()
+        location = neighbor.location if neighbor else str(example.get("location", "")).strip()
+        base_demand = neighbor.base_demand if neighbor else example.get("base_demand")
+        preferred = neighbor.preferred_slots if neighbor else example.get("preferred_slots", [])
+        comfort = neighbor.comfort_penalty if neighbor else example.get("comfort_penalty")
+
+        ground_truth = ground_truth_map.get(neighbor_id)
+
+        header = f"Neighbor {neighbor_id}"
+        if persona:
+            header += f" — {persona}"
+        if location:
+            header += f" (location {location})"
+
+        base_demand_text = (
+            ", ".join(f"{float(value):.2f}" for value in base_demand)
+            if base_demand is not None
+            else "unknown"
+        )
+        preferred_text = ", ".join(str(int(idx)) for idx in preferred) if preferred else "None"
+        comfort_text = f"{float(comfort):.2f}" if comfort is not None else "unknown"
+        if ground_truth:
+            ground_truth_text = "; ".join(
+                f"Day {idx + 1}: {slots}"
+                for idx, slots in enumerate(ground_truth)
+            )
+        else:
+            ground_truth_text = "Unavailable"
+
+        lines = [
+            f"- {header}",
+            f"  Base demand: {base_demand_text}",
+            f"  Preferred slots: {preferred_text} | Comfort penalty: {comfort_text}",
+            f"  Ground truth min-cost slots by day: {ground_truth_text}",
+        ]
+        block = "\n".join(lines)
+        if indent_level:
+            block = indent(block, " " * indent_level)
+        blocks.append(block)
+
+    if not blocks:
+        return (" " * indent_level) + "- No neighbour exemplars provided" if indent_level else "- No neighbour exemplars provided"
+
+    return "\n".join(blocks)

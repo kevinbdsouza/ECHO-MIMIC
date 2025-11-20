@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import itertools
 import json
 from dataclasses import dataclass
@@ -237,7 +238,14 @@ def enumerate_global_optimum(scenario: EVScenario) -> Tuple[List[List[int]], flo
         day_best: List[int] | None = None
         day_score: float | None = None
         for allocation in itertools.product(range(len(scenario.slots)), repeat=scenario.num_agents):
-            day_cost = _day_global_cost(scenario, day_idx, allocation)
+            base_cost = _day_global_cost(scenario, day_idx, allocation)
+            noise = _noise_multiplier(
+                scenario.scenario_id,
+                "global",
+                day_idx,
+                *allocation,
+            )
+            day_cost = base_cost * noise
             if day_score is None or day_cost < day_score:
                 day_score = day_cost
                 day_best = list(allocation)
@@ -288,6 +296,16 @@ def _day_global_cost(
     )
 
 
+def _noise_multiplier(*components: object, magnitude: float = 0.20) -> float:
+    """Return a deterministic multiplier in [1-m, 1+m] derived from ``components``."""
+
+    key = "|".join(str(component) for component in components)
+    digest = hashlib.sha256(key.encode("utf-8")).digest()
+    int_value = int.from_bytes(digest[:8], "big")
+    normalized = (int_value / (2**64 - 1)) * 2.0 - 1.0  # [-1, 1]
+    return 1.0 + magnitude * normalized
+
+
 def enumerate_local_optima(scenario: EVScenario) -> Dict[int, List[List[int]]]:
     """Return the set of minimum-cost slots for each agent and day."""
 
@@ -295,10 +313,17 @@ def enumerate_local_optima(scenario: EVScenario) -> Dict[int, List[List[int]]]:
     for agent in scenario.agents:
         per_day: List[List[int]] = []
         for day_idx in range(scenario.num_days):
-            costs = [
-                compute_local_cost(scenario, agent, day_idx, slot)
-                for slot in range(len(scenario.slots))
-            ]
+            costs = []
+            for slot in range(len(scenario.slots)):
+                base_cost = compute_local_cost(scenario, agent, day_idx, slot)
+                noise = _noise_multiplier(
+                    scenario.scenario_id,
+                    "local",
+                    agent.id,
+                    day_idx,
+                    slot,
+                )
+                costs.append(base_cost * noise)
             min_cost = min(costs)
             best_slots = [
                 slot for slot, cost in enumerate(costs) if abs(cost - min_cost) < 1e-9
@@ -399,4 +424,3 @@ def dump_ground_truth(directory: Path, scenario: EVScenario) -> None:
         agent_nudge_path.write_text(
             json.dumps(agent_nudge_payload, indent=2) + "\n", encoding="utf-8"
         )
-

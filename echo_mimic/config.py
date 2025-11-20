@@ -11,7 +11,7 @@ class Config:
 
         # DSPy configuration values
         self.farms_dir = os.path.join(self.data_dir)
-        self.lm = "gemini/gemini-1.5-flash"
+        self.lm = "gemini-flash-lite-latest"
         self.auto = "heavy"
         self.trials = 50
         self.seed = 9

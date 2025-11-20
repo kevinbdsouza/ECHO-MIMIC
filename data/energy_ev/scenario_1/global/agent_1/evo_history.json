@@ -1,0 +1,62 @@
+[
+  {
+    "best_detail": {
+      "status": "error",
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_1/_candidate_global.py\", line 380, in <module>\n    main()\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_1/_candidate_global.py\", line 365, in main\n    recommended_slots = recommend_slots(scenario, augmented_neighbors)\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_1/_candidate_global.py\", line 285, in recommend_slots\n    for slot in slot_list:\nTypeError: 'int' object is not iterable\n"
+    },
+    "best_score": 0.0,
+    "counts": {
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "init": 1,
+      "mutate": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "init": 0.0,
+      "mutate": 0.0,
+      "reflect": 0.0
+    },
+    "generation": 0,
+    "mean_score": 0.0,
+    "population_size": 5,
+    "score": 0.0,
+    "trajectory": [
+      "init(0.0000)"
+    ]
+  },
+  {
+    "best_detail": {
+      "status": "error",
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_1/_candidate_global.py\", line 380, in <module>\n    main()\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_1/_candidate_global.py\", line 365, in main\n    recommended_slots = recommend_slots(scenario, augmented_neighbors)\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_1/_candidate_global.py\", line 285, in recommend_slots\n    for slot in slot_list:\nTypeError: 'int' object is not iterable\n"
+    },
+    "best_score": 0.0,
+    "counts": {
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "init": 1,
+      "mutate": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "init": 0.0,
+      "mutate": 0.0,
+      "reflect": 0.0
+    },
+    "generation": 1,
+    "mean_score": 0.0,
+    "population_size": 5,
+    "score": 0.0,
+    "trajectory": [
+      "init(0.0000)"
+    ]
+  }
+]

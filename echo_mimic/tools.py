@@ -79,7 +79,7 @@ class CommandOutputCapture:
                     stderr=subprocess.PIPE if capture_stderr else None,
                     universal_newlines=True
             ) as process:
-                stdout, stderr = process.communicate()
+                stdout, stderr = process.communicate(timeout=20)
                 return_code = process.returncode
 
                 if return_code:

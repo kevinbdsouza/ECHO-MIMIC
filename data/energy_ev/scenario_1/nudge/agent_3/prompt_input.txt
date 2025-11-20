@@ -3,31 +3,615 @@ MIMIC Stage 4 (Nudging) — Agent 3
 
 Persona context
 ---------------
-Position 3 night-shift nurse on the central ridge
-
-Neighbour exemplars (still the only observations available)
-----------------------------------------------------------
-- Neighbor 2 → slot 2 (Analyst stayed on slot 2 when feeder stress stayed low)
-- Neighbor 5 → slot 1 (Student tenant mirrored the ridge plan to align with transit)
+persona: Position 3 night-shift nurse on the central ridge
+location: 3
+base_demand: 0.60, 0.80, 0.90, 0.70
 
 Current heuristics snapshot
 ---------------------------
 Local imitation code:
-    # Local policy for agent 3 not yet evolved
+# This is what the agent is currently following for personal goals
+    import json
+    import numpy as np
+
+    # --- Agent Setup ---
+    SLOTS = [
+        {"start": 19, "end": 20, "price": 0.23, "carbon": 700},
+        {"start": 20, "end": 21, "price": 0.24, "carbon": 480},
+        {"start": 21, "end": 22, "price": 0.27, "carbon": 500},
+        {"start": 22, "end": 23, "price": 0.30, "carbon": 750},
+    ]
+    CAPACITY = 6.8
+    BASE_LOADS = [5.2, 5.0, 4.9, 6.5]
+    SLOT_MIN_SESSIONS = [1, 1, 1, 1]
+    SLOT_MAX_SESSIONS = [2, 2, 1, 2]
+
+    # Agent 3 Profile
+    LOCATION = 3
+    BASE_DEMAND = [0.60, 0.80, 0.90, 0.70]
+
+    # Neighbor Examples for Imitation Context
+    NEIGHBOR_EXAMPLES = [
+        # Neighbor 2 (Location 2, Transformer headroom focus)
+        {"location": 2, "base_demand": [0.70, 1.00, 0.80, 0.50], "preferred_slots": [1, 2], "comfort_penalty": 0.14, "ground_truth": [1, 1, 1, 1, 1, 1, 1]},
+        # Neighbor 5 (Location 5, Late commuter)
+        {"location": 5, "base_demand": [0.50, 0.70, 0.60, 0.90], "preferred_slots": [0, 1], "comfort_penalty": 0.12, "ground_truth": [0, 1, 0, 0, 1, 1, 1]},
+    ]
+
+    # --- Scenario Data Loading (Mocked via prompt context) ---
+
+    # Define the full scenario data structure based on the prompt
+    SCENARIO_DATA = {
+        "scenario_id": "ev_peak_sharing_1",
+        "slots": SLOTS,
+        "price": [0.23, 0.24, 0.27, 0.30],
+        "carbon_intensity": [700, 480, 500, 750],
+        "capacity": CAPACITY,
+        "baseline_load": BASE_LOADS,
+        "slot_min_sessions": SLOT_MIN_SESSIONS,
+        "slot_max_sessions": SLOT_MAX_SESSIONS,
+        "spatial_carbon": {
+            "1": [440, 460, 490, 604], "2": [483, 431, 471, 600], "3": [503, 473, 471, 577],
+            "4": [617, 549, 479, 363], "5": [411, 376, 554, 623]
+        },
+        "days": {
+            "Day 1": {"Tariff": [0.20, 0.25, 0.29, 0.32], "Carbon": [490, 470, 495, 540], "Baseline load": [5.3, 5.0, 4.8, 6.5], "Spatial carbon": {"1": [330, 520, 560, 610], "2": [550, 340, 520, 600], "3": [590, 520, 340, 630], "4": [620, 560, 500, 330], "5": [360, 380, 560, 620]}},
+            "Day 2": {"Tariff": [0.27, 0.22, 0.24, 0.31], "Carbon": [485, 460, 500, 545], "Baseline load": [5.1, 5.2, 4.9, 6.6], "Spatial carbon": {"1": [510, 330, 550, 600], "2": [540, 500, 320, 610], "3": [310, 520, 550, 630], "4": [620, 540, 500, 340], "5": [320, 410, 560, 640]}},
+            "Day 3": {"Tariff": [0.24, 0.21, 0.26, 0.30], "Carbon": [500, 455, 505, 550], "Baseline load": [5.4, 5.0, 4.9, 6.4], "Spatial carbon": {"1": [540, 500, 320, 600], "2": [320, 510, 540, 600], "3": [560, 330, 520, 610], "4": [620, 560, 500, 330], "5": [330, 420, 550, 640]}},
+            "Day 4": {"Tariff": [0.19, 0.24, 0.28, 0.22], "Carbon": [495, 470, 500, 535], "Baseline load": [5.0, 5.1, 5.0, 6.7], "Spatial carbon": {"1": [320, 520, 560, 600], "2": [550, 330, 520, 580], "3": [600, 540, 500, 320], "4": [560, 500, 330, 540], "5": [500, 340, 560, 630]}},
+            "Day 5": {"Tariff": [0.23, 0.20, 0.27, 0.31], "Carbon": [500, 450, 505, 545], "Baseline load": [5.2, 5.3, 5.0, 6.6], "Spatial carbon": {"1": [510, 330, 560, 600], "2": [560, 500, 320, 590], "3": [320, 520, 540, 620], "4": [630, 560, 510, 340], "5": [330, 420, 560, 630]}},
+            "Day 6": {"Tariff": [0.26, 0.22, 0.25, 0.29], "Carbon": [505, 460, 495, 540], "Baseline load": [5.5, 5.2, 4.8, 6.5], "Spatial carbon": {"1": [540, 500, 320, 610], "2": [320, 510, 560, 620], "3": [560, 340, 520, 610], "4": [640, 560, 510, 330], "5": [520, 330, 540, 600]}},
+            "Day 7": {"Tariff": [0.21, 0.23, 0.28, 0.26], "Carbon": [495, 460, 500, 530], "Baseline load": [5.1, 4.9, 4.8, 6.3], "Spatial carbon": {"1": [330, 520, 560, 610], "2": [540, 330, 520, 600], "3": [580, 540, 330, 620], "4": [630, 560, 500, 330], "5": [520, 330, 550, 600]}},
+        }
+    }
+
+    # --- Agent 3 Policy Logic (Imitation) ---
+
+    class Agent3Policy:
+        def __init__(self, scenario_data, base_demand, location):
+            self.scenario = scenario_data
+            self.base_demand = np.array(base_demand)
+            self.location = str(location)
+            self.n_slots = len(self.scenario['slots'])
+            self.n_days = len(self.scenario['days'])
+        
+            # Pre-calculate neighbor imitation targets (Ground Truth)
+            self.imitation_targets = self._get_imitation_targets()
+
+        def _get_imitation_targets(self):
+            """Extract the chosen slot for each day from neighbor examples."""
+            targets = []
+            day_names = list(self.scenario['days'].keys())
+        
+            # In imitation stage, the agent strictly follows one of the neighbors' known optimal choices.
+            # Agent 3 (Central Ridge, Night Shift) might find Neighbor 2 (L2 analyst, headroom focus)
+            # or Neighbor 5 (L5 grad, late commuter) more representative of its own timing needs,
+            # or it might simply pick the average/most common choice among them.
+        
+            # Let's assume Agent 3 observes that Neighbor 5 (late preference, slots 0, 1) and 
+            # Neighbor 2 (mid preference, slots 1, 2) represent relevant behaviors.
+        
+            # Since Agent 3 is a night-shift nurse (base demand peaks late: 0.8, 0.9), 
+            # they likely prefer later slots than Neighbor 5 (0, 1) but might align with
+            # the comfort/timing concerns of Neighbor 2 (1, 2).
+        
+            # For strict imitation (Stage 2), we look at the ground truth.
+            # We will mimic the neighbor whose behavior seems most aligned with the agent's profile:
+            # Agent 3 Base Demand: [0.60, 0.80, 0.90, 0.70] -> Strongest need in slots 1 (20-21) and 2 (21-22).
+            # Neighbor 2 Prefers: [1, 2] -> Strong match.
+            # Neighbor 5 Prefers: [0, 1] -> Weaker match.
+        
+            # We choose Neighbor 2's Ground Truth plan as the imitation target.
+            return NEIGHBOR_EXAMPLES[0]["ground_truth"]
+
+
+        def calculate_cost(self, day_data, slot_idx):
+            """Calculate the composite cost for Agent 3 in a given slot."""
+        
+            # 1. Price Cost (Minimized)
+            price_cost = day_data['Tariff'][slot_idx]
+        
+            # 2. Carbon Cost (Minimized, weighted by spatial carbon)
+            spatial_carbon_map = day_data['Spatial carbon']
+            agent_spatial_carbon = spatial_carbon_map[self.location][slot_idx]
+        
+            # Use the day's overall carbon intensity as a baseline multiplier for relative weighting
+            carbon_factor = day_data['Carbon'][slot_idx] / self.scenario['carbon_intensity'][slot_idx]
+            carbon_cost = day_data['Carbon'][slot_idx] + (agent_spatial_carbon * carbon_factor * 0.5) # Weight spatial slightly lower
+        
+            # 3. Demand/Comfort Cost (Minimized based on agent's profile mismatch)
+            agent_demand = self.base_demand[slot_idx]
+        
+            # Agent 3 is a night-shift nurse, meaning slots 1 and 2 are crucial (0.8, 0.9 demand). 
+            # If demand is high, cost is low (no penalty). If demand is low, penalty is high.
+        
+            # Simple cost heuristic: Penalize heavily if charging outside peak demand (1 or 2)
+            comfort_penalty = 0.0
+            if slot_idx == 0:
+                comfort_penalty = (1.0 - agent_demand) * 0.15 # High penalty if choosing slot 0 when demand is usually high later
+            elif slot_idx == 3:
+                comfort_penalty = (1.0 - agent_demand) * 0.10 # Medium penalty if choosing slot 3 when demand is usually lower
+            elif slot_idx in [1, 2]:
+                 comfort_penalty = 0.0 # Low penalty if meeting own peak need
+             
+            # Total Cost (Minimize price and carbon, penalize comfort mismatch)
+            # We prioritize matching the neighbor's historical choice heavily, so the cost function
+            # here is secondary to the imitation logic in Stage 2.
+            total_cost = price_cost + (carbon_cost / 1000.0) + comfort_penalty
+        
+            return total_cost
+
+        def choose_slot(self, day_index):
+            """
+            In Stage 2 (Imitation), the agent chooses the slot historically chosen 
+            by the most relevant neighbor for that day.
+            """
+            return self.imitation_targets[day_index]
+
+        def generate_policy(self):
+        
+            day_names = list(self.scenario['days'].keys())
+            policy_output = []
+        
+            print(f"Agent 3 (Location {self.location}, Night Shift) - Imitating Neighbor 2's historical plan.")
+        
+            for i in range(self.n_days):
+                day_name = day_names[i]
+            
+                # Decision based purely on imitation target for Stage 2
+                chosen_slot = self.choose_slot(i)
+                policy_output.append(chosen_slot)
+            
+                # --- Verification/Debug (Optional: To show what the agent is *ignoring* for imitation) ---
+                day_data = self.scenario['days'][day_name]
+            
+                slot_costs = [self.calculate_cost(day_data, j) for j in range(self.n_slots)]
+            
+                # Check constraints (Agent 3 assumes 1 session to satisfy min/max constraints easily)
+                # Capacity constraint is handled globally, agent just proposes usage.
+            
+                print(f"{day_name} (Idx {i+1}): Imitation Slot={chosen_slot}")
+                # print(f"    Costs: {[f'{c:.3f}' for c in slot_costs]}")
+                # print(f"    Best Cost Slot (Self-Optimization): {np.argmin(slot_costs)}")
+            
+            return policy_output
+
+    # --- Execution ---
+
+    # 1. Load Scenario Data (Already mocked above, replacing file read for runnable single script)
+    # In a real environment, this would be:
+    # with open('scenario.json', 'r') as f:
+    #     scenario_data = json.load(f)
+
+    scenario_data = SCENARIO_DATA
+    agent_base_demand = BASE_DEMAND
+    agent_location = LOCATION
+
+    # 2. Choose Slots based on Imitation Stage objective
+    policy_generator = Agent3Policy(scenario_data, agent_base_demand, agent_location)
+    seven_day_plan = policy_generator.generate_policy()
+
+    # 3. Write local_policy_output.json
+    output_filename = "local_policy_output.json"
+    with open(output_filename, 'w') as f:
+        json.dump(seven_day_plan, f, indent=4)
+
+    # print(f"\nGenerated policy: {seven_day_plan}")
+    # print(f"Output saved to {output_filename}")
+    # 4. Policy is saved as policy.py (this file content)
+
+    # Final required output is just the Python code.
+    pass # End of simulation setup
+
+    # The content below represents the final file 'policy.py'
+    # --- policy.py contents ---
+    import json
+    import numpy as np
+
+    # --- Agent Setup ---
+    SLOTS = [
+        {"start": 19, "end": 20, "price": 0.23, "carbon": 700},
+        {"start": 20, "end": 21, "price": 0.24, "carbon": 480},
+        {"start": 21, "end": 22, "price": 0.27, "carbon": 500},
+        {"start": 22, "end": 23, "price": 0.30, "carbon": 750},
+    ]
+    CAPACITY = 6.8
+    BASE_LOADS = [5.2, 5.0, 4.9, 6.5]
+    SLOT_MIN_SESSIONS = [1, 1, 1, 1]
+    SLOT_MAX_SESSIONS = [2, 2, 1, 2]
+
+    # Agent 3 Profile
+    LOCATION = 3
+    BASE_DEMAND = [0.60, 0.80, 0.90, 0.70]
+
+    # Neighbor Examples for Imitation Context
+    NEIGHBOR_EXAMPLES = [
+        # Neighbor 2 (Location 2, Transformer headroom focus) -> Chosen for imitation match
+        {"location": 2, "base_demand": [0.70, 1.00, 0.80, 0.50], "preferred_slots": [1, 2], "comfort_penalty": 0.14, "ground_truth": [1, 1, 1, 1, 1, 1, 1]},
+        # Neighbor 5 (Location 5, Late commuter)
+        {"location": 5, "base_demand": [0.50, 0.70, 0.60, 0.90], "preferred_slots": [0, 1], "comfort_penalty": 0.12, "ground_truth": [0, 1, 0, 0, 1, 1, 1]},
+    ]
+
+    # --- Scenario Data Loading (Mocked via prompt context) ---
+    SCENARIO_DATA = {
+        "scenario_id": "ev_peak_sharing_1",
+        "slots": SLOTS,
+        "price": [0.23, 0.24, 0.27, 0.30],
+        "carbon_intensity": [700, 480, 500, 750],
+        "capacity": CAPACITY,
+        "baseline_load": BASE_LOADS,
+        "slot_min_sessions": SLOT_MIN_SESSIONS,
+        "slot_max_sessions": SLOT_MAX_SESSIONS,
+        "spatial_carbon": {
+            "1": [440, 460, 490, 604], "2": [483, 431, 471, 600], "3": [503, 473, 471, 577],
+            "4": [617, 549, 479, 363], "5": [411, 376, 554, 623]
+        },
+        "days": {
+            "Day 1": {"Tariff": [0.20, 0.25, 0.29, 0.32], "Carbon": [490, 470, 495, 540], "Baseline load": [5.3, 5.0, 4.8, 6.5], "Spatial carbon": {"1": [330, 520, 560, 610], "2": [550, 340, 520, 600], "3": [590, 520, 340, 630], "4": [620, 560, 500, 330], "5": [360, 380, 560, 620]}},
+            "Day 2": {"Tariff": [0.27, 0.22, 0.24, 0.31], "Carbon": [485, 460, 500, 545], "Baseline load": [5.1, 5.2, 4.9, 6.6], "Spatial carbon": {"1": [510, 330, 550, 600], "2": [540, 500, 320, 610], "3": [310, 520, 550, 630], "4": [620, 540, 500, 340], "5": [320, 410, 560, 640]}},
+            "Day 3": {"Tariff": [0.24, 0.21, 0.26, 0.30], "Carbon": [500, 455, 505, 550], "Baseline load": [5.4, 5.0, 4.9, 6.4], "Spatial carbon": {"1": [540, 500, 320, 600], "2": [320, 510, 540, 600], "3": [560, 330, 520, 610], "4": [620, 560, 500, 330], "5": [330, 420, 550, 640]}},
+            "Day 4": {"Tariff": [0.19, 0.24, 0.28, 0.22], "Carbon": [495, 470, 500, 535], "Baseline load": [5.0, 5.1, 5.0, 6.7], "Spatial carbon": {"1": [320, 520, 560, 600], "2": [550, 330, 520, 580], "3": [600, 540, 500, 320], "4": [560, 500, 330, 540], "5": [500, 340, 560, 630]}},
+            "Day 5": {"Tariff": [0.23, 0.20, 0.27, 0.31], "Carbon": [500, 450, 505, 545], "Baseline load": [5.2, 5.3, 5.0, 6.6], "Spatial carbon": {"1": [510, 330, 560, 600], "2": [560, 500, 320, 590], "3": [320, 520, 540, 620], "4": [630, 560, 510, 340], "5": [330, 420, 560, 630]}},
+            "Day 6": {"Tariff": [0.26, 0.22, 0.25, 0.29], "Carbon": [505, 460, 495, 540], "Baseline load": [5.5, 5.2, 4.8, 6.5], "Spatial carbon": {"1": [540, 500, 320, 610], "2": [320, 510, 560, 620], "3": [560, 340, 520, 610], "4": [640, 560, 510, 330], "5": [520, 330, 540, 600]}},
+            "Day 7": {"Tariff": [0.21, 0.23, 0.28, 0.26], "Carbon": [495, 460, 500, 530], "Baseline load": [5.1, 4.9, 4.8, 6.3], "Spatial carbon": {"1": [330, 520, 560, 610], "2": [540, 330, 520, 600], "3": [580, 540, 330, 620], "4": [630, 560, 500, 330], "5": [520, 330, 550, 600]}},
+        }
+    }
+
+    # --- Agent 3 Policy Logic (Imitation) ---
+
+    class Agent3Policy:
+        def __init__(self, scenario_data, base_demand, location):
+            self.scenario = scenario_data
+            self.base_demand = np.array(base_demand)
+            self.location = str(location)
+            self.n_slots = len(self.scenario['slots'])
+            self.n_days = len(self.scenario['days'])
+        
+            # Pre-calculate neighbor imitation targets (Ground Truth)
+            self.imitation_targets = self._get_imitation_targets()
+
+        def _get_imitation_targets(self):
+            """Extract the chosen slot for each day from neighbor examples."""
+        
+            # Agent 3 (Location 3, Night Shift, high demand in slots 1, 2) aligns best 
+            # behaviorally with Neighbor 2 (Loc 2, Prefers 1, 2). We use N2's ground truth.
+            return NEIGHBOR_EXAMPLES[0]["ground_truth"]
+
+        def calculate_cost(self, day_data, slot_idx):
+            """Calculate the composite cost for Agent 3 in a given slot (not strictly used in Stage 2 imitation)."""
+        
+            price_cost = day_data['Tariff'][slot_idx]
+        
+            spatial_carbon_map = day_data['Spatial carbon']
+            agent_spatial_carbon = spatial_carbon_map[self.location][slot_idx]
+            carbon_factor = day_data['Carbon'][slot_idx] / self.scenario['carbon_intensity'][slot_idx]
+            carbon_cost = day_data['Carbon'][slot_idx] + (agent_spatial_carbon * carbon_factor * 0.5)
+        
+            agent_demand = self.base_demand[slot_idx]
+            comfort_penalty = 0.0
+            if slot_idx == 0:
+                comfort_penalty = (1.0 - agent_demand) * 0.15
+            elif slot_idx == 3:
+                comfort_penalty = (1.0 - agent_demand) * 0.10
+            elif slot_idx in [1, 2]:
+                 comfort_penalty = 0.0
+             
+            total_cost = price_cost + (carbon_cost / 1000.0) + comfort_penalty
+        
+            return total_cost
+
+        def choose_slot(self, day_index):
+            """
+            In Stage 2 (Imitation), the agent chooses the slot historically chosen 
+            by the most relevant neighbor for that day.
+            """
+            return self.imitation_targets[day_index]
+
+        def generate_policy(self):
+        
+            day_names = list(self.scenario['days'].keys())
+            policy_output = []
+        
+            for i in range(self.n_days):
+                # Decision based purely on imitation target for Stage 2
+                chosen_slot = self.choose_slot(i)
+                policy_output.append(chosen_slot)
+            
+            return policy_output
+
+    # --- Execution ---
+    # Context data (derived from prompt)
+    scenario_data = SCENARIO_DATA
+    agent_base_demand = BASE_DEMAND
+    agent_location = LOCATION
+
+    # 2. Choose Slots based on Imitation Stage objective
+    policy_generator = Agent3Policy(scenario_data, agent_base_demand, agent_location)
+    seven_day_plan = policy_generator.generate_policy()
+
+    # 3. Write local_policy_output.json
+    output_filename = "local_policy_output.json"
+    with open(output_filename, 'w') as f:
+        json.dump(seven_day_plan, f, indent=4)
 
 Global coordination code:
-    # Global policy for agent 3 not yet evolved
+# This is what the agent should follow for common global goals
+    import json
+    import os
+    import numpy as np
+
+    class DERPolicy:
+        def __init__(self, scenario_data, agent_id):
+            self.scenario = scenario_data
+            self.agent_id = agent_id
+            self.T = len(scenario_data['slots'])
+            self.N_neighbors = len(scenario_data.get('neighbor_examples', {}))
+
+            # Agent specific data
+            self.base_demand = np.array(self.scenario['base_demand'])
+            self.capacity = self.scenario['capacity']
+            self.alpha = self.scenario['alpha']
+            self.beta = self.scenario['beta']
+            self.gamma = self.scenario['gamma']
+
+            # Fixed neighbor data (for this agent configuration)
+            self.neighbor_data = self._process_neighbor_examples(self.scenario.get('neighbor_examples', {}))
+
+        def _process_neighbor_examples(self, neighbors):
+            processed = {}
+            for name, data in neighbors.items():
+                match = name.split(' — ')[0].split(' ')[-1]
+                processed[match] = {
+                    'base_demand': np.array(data['Base demand']),
+                    'preferred_slots': set(data['Preferred slots']),
+                    'comfort_penalty': data['Comfort penalty'],
+                    'ground_truth': data['Ground truth min-cost slots by day']
+                }
+            return processed
+
+        def _get_day_data(self, day_index):
+            day_key = f"Day {day_index + 1}"
+        
+            # Find the key that matches the day description format
+            matching_day_key = next((k for k in self.scenario['days'] if k.startswith(day_key)), None)
+            if not matching_day_key:
+                raise ValueError(f"Could not find data for {day_key}")
+            
+            day_data = self.scenario['days'][matching_day_key]
+        
+            tariffs = np.array(day_data['Tariff'])
+            carbons = np.array(day_data['Carbon'])
+            baselines = np.array(day_data['Baseline load'])
+        
+            spatial_carbon = {}
+            spat_str = day_data['Spatial carbon']
+        
+            # Parse spatial carbon: "1: 330, 520, 560, 610; 2: 550, 340, 520, 600; ..."
+            for item in spat_str.split(';'):
+                loc_id, c_str = item.strip().split(':')
+                spatial_carbon[int(loc_id)] = np.array([int(c.strip()) for c in c_str.split(',')])
+            
+            return tariffs, carbons, baselines, spatial_carbon
+
+        def _calculate_agent_cost(self, day_idx, slot_idx, baseline_load, spatial_carbon, neighbor_activity=None):
+        
+            # 1. Individual Cost Component (Comfort/Demand Satisfaction)
+            # Assume the agent wants to use their base demand in the least costly slot available
+            # Cost = alpha * Price + beta * Carbon + gamma * Congestion_Penalty
+        
+            # Price and Carbon from the scenario (assuming these are the *expected* future values)
+            # Note: The scenario description suggests the main day data has specific values, 
+            # but the "Forecast note" implies variance. We use the day-specific values if available, 
+            # otherwise fall back to the header values for the common slots.
+        
+            # Use the specific day's data if available
+            tariffs, carbons, _, _ = self._get_day_data(day_idx)
+        
+            price = tariffs[slot_idx]
+            carbon = carbons[slot_idx]
+        
+            # Agent Demand (1.0 if charging, 0.0 otherwise)
+            # Since we only recommend one slot, the demand contribution is simply the base demand if selected.
+            demand_if_chosen = self.base_demand[slot_idx]
+        
+            # Comfort/Cost Penalty (Relative to baseline demand in that slot)
+            # For simplicity in this collective model, we focus on the core objectives: Price, Carbon, Congestion.
+            # Comfort is implicitly modeled by choosing slots that minimize overall stress/cost.
+        
+            # Individual Cost Calculation based on objectives:
+            individual_cost = (self.alpha * price) + (self.beta * carbon)
+        
+            # 2. Congestion Cost Component (Based on Neighbor Activity & Capacity)
+            congestion_penalty = 0.0
+            if neighbor_activity is not None:
+                # Calculate total concurrent load (including self if chosen)
+                total_load = demand_if_chosen
+                for neighbor_slot_idx, neighbor_demand in neighbor_activity.items():
+                    if neighbor_slot_idx == slot_idx:
+                        total_load += neighbor_demand 
+            
+                # Congestion is related to how close we are to capacity, weighted by the gamma factor
+                if self.capacity > 0:
+                    congestion_ratio = total_load / self.capacity
+                    # Apply penalty if load exceeds baseline or capacity (using ratio as proxy)
+                    congestion_penalty = self.gamma * max(0, congestion_ratio - 1.0)
+        
+            # 3. Spatial Congestion/Carbon Penalty (Specific to Agent Location 3)
+            # Agent is at Location 3
+            spatial_cost = 0.0
+            if spatial_carbon and self.scenario['location'] in spatial_carbon:
+                # Spatial carbon at slot_idx for this agent's location
+                loc_carbon = spatial_carbon[self.scenario['location']][slot_idx]
+                # Use a fraction of gamma for spatial impact, potentially using the grid carbon as a reference
+                # Here, we prioritize high spatial carbon as undesirable
+                spatial_cost = (self.gamma / 2.0) * (loc_carbon / 1000.0) # Normalize scale
+
+        
+            total_cost = individual_cost + congestion_penalty + spatial_cost
+        
+            # Add a penalty if the demand is incompatible with local constraints (e.g., too low/high demand for slot)
+            # Given we must choose one slot, we don't implement a specific comfort term unless it's required to break ties.
+        
+            return total_cost
+
+        def _get_neighbor_demand(self, day_idx, slot_idx):
+            # Estimate neighbor demand based on their preferred slots and ground truth
+            neighbor_loads = {}
+        
+            day_key_map = {
+                0: 'Day 1', 1: 'Day 2', 2: 'Day 3', 3: 'Day 4', 
+                4: 'Day 5', 5: 'Day 6', 6: 'Day 7'
+            }
+            day_label = day_key_map[day_idx]
+        
+            for name, data in self.neighbor_data.items():
+                # Strategy: Assume neighbors charge their full base demand in their chosen slot.
+                # Use ground truth if available to infer their likely action for coordination.
+            
+                gt_slots = data['ground_truth']
+            
+                # Determine the target slot for this neighbor today
+                target_slot = -1
+                try:
+                    # Find the index corresponding to the current day label
+                    day_idx_in_gt = [d for d in self.scenario['days'].keys() if d.startswith(day_label)][0]
+                
+                    # The ground truth list is ordered Day 1 to Day 7
+                    gt_index = int(day_label.split(' ')[1]) - 1
+                    if gt_index < len(gt_slots):
+                        target_slot = gt_slots[gt_index]
+                except Exception:
+                    # Fallback: If GT indexing fails, use preferred slots or nearest slot
+                    if slot_idx in data['preferred_slots']:
+                        target_slot = slot_idx
+                    else:
+                        # If not in preferred, choose the *best* preferred slot for coordination
+                        # Since we are minimizing cost, we assume neighbors pick their best cost slot
+                        # For simplicity in prediction, let's assume they follow the GT exactly.
+                        target_slot = gt_slots[day_idx] if day_idx < len(gt_slots) else list(data['preferred_slots'])[0]
+
+            
+                if target_slot == slot_idx:
+                    # Assume neighbor charges their full base demand in the chosen slot
+                    neighbor_loads[name] = data['base_demand'][slot_idx]
+                else:
+                    # Assume neighbor charges 0 load if not in the calculated slot
+                    neighbor_loads[name] = 0.0
+                
+            return neighbor_loads
+
+        def run_day_optimization(self, day_idx):
+            tariffs, carbons, baselines, spatial_carbon = self._get_day_data(day_idx)
+        
+            best_slot = -1
+            min_cost = float('inf')
+        
+            # --- 1. Calculate Neighbor Activity Baseline (Coordination Input) ---
+            # We need to estimate what neighbors *will* do if we make a decision.
+            # Since this is a collective stage, we assume neighbors coordinate based on their GT/preferences.
+        
+            # For simplicity, we run an iterative coordination guess, but since we only output *our* slot,
+            # we calculate the neighbor load assuming they followed their *observed* best strategy (GT).
+            neighbor_activity_baseline = self._get_neighbor_demand(day_idx, -1) # -1 means calculate for all slots
+
+            # --- 2. Evaluate Each Slot for Agent 3 ---
+        
+            # Local Comfort/Demand Factor: Agent 3 (Nurse) prefers night shifts, low demand early morning slots (1, 2) 
+            # Base demand: 0.60 (S0), 0.80 (S1), 0.90 (S2), 0.70 (S3)
+            # Location 3: Prefers slots where spatial carbon is low (Day 3: S2 is low spatial)
+        
+            # Heuristic Adjustment: Prioritize slots 1 and 2 (high base demand implies higher need/comfort weight)
+            # and slots with lower carbon intensity, while respecting capacity.
+        
+            for s in range(self.T):
+            
+                # Calculate neighbor load *if* Agent 3 selects slot s
+                current_neighbor_loads = self._get_neighbor_demand(day_idx, s)
+            
+                # Cost evaluation (Includes carbon, price, and congestion based on predicted neighbors)
+                cost = self._calculate_agent_cost(day_idx, s, baselines[s], spatial_carbon, current_neighbor_loads)
+            
+                # Coordination Heuristic: Favor slots that neighbors are *not* heavily using, 
+                # especially if neighbors are observed to be prioritizing low-carbon slots on other days.
+            
+                # Coordination Check (Inferred Neighbor Load at Slot s)
+                inferred_neighbor_load = sum(current_neighbor_loads.values())
+            
+                # Apply a slight bonus if the slot appears less congested based on neighbors' GT choices
+                # (This encourages spreading out if neighbors are clustered, or clustering if neighbors are sparse)
+                if inferred_neighbor_load > 0:
+                     # If neighbors are present, penalize based on how full the slot is relative to capacity
+                     coordination_bonus = -self.gamma * (inferred_neighbor_load / self.capacity) * 0.5
+                else:
+                     coordination_bonus = 0.0
+                 
+                final_cost = cost + coordination_bonus
+            
+                # Agent 3 specific weighting: Nurse working night shift (strong preference for S1/S2)
+                # Introduce a strong penalty for S0 and S3 unless they offer massive savings.
+                comfort_weight = 0.0
+                if s == 0 or s == 3:
+                    comfort_weight = 50.0 # High penalty for undesirable slots
+                elif s == 1 or s == 2:
+                    comfort_weight = -10.0 # Small reward for desired slots (S1/S2)
+                
+                final_cost += comfort_weight
+            
+                if final_cost < min_cost:
+                    min_cost = final_cost
+                    best_slot = s
+                
+            return best_slot
+
+        def generate_recommendation(self):
+            recommendations = []
+            for day_idx in range(7):
+                slot = self.run_day_optimization(day_idx)
+                recommendations.append(slot)
+            return recommendations
+
+    def load_scenario(file_path):
+        with open(file_path, 'r') as f:
+            return json.load(f)
+
+    def main():
+        # The scenario file name is assumed to be 'scenario.json' relative to the execution directory
+        scenario_file = 'scenario.json'
+    
+        # In a real environment, we would need the agent_id, but here we hardcode Agent 3 context
+        AGENT_ID = 3 
+    
+        try:
+            scenario_data = load_scenario(scenario_file)
+        except FileNotFoundError:
+            # Handle case where scenario.json might be expected in a different structure
+            # For this specific problem, we assume it's in the current directory.
+            print(f"Error: {scenario_file} not found.")
+            return
+
+        policy = DERPolicy(scenario_data, AGENT_ID)
+        recommendations = policy.generate_recommendation()
+
+        # Output specification: global_policy_output.json
+        output_data = {
+            "recommendations": recommendations
+        }
+    
+        with open('global_policy_output.json', 'w') as f:
+            json.dump(output_data, f, indent=4)
+
+    if __name__ == "__main__":
+        main()
 
 Task
 ----
 Create a JSON object with keys ``persona``, ``recommended_slots`` (seven daily indices), and ``message`` that nudges this persona
 from their local behaviour towards the coordinated recommendation implied by the global heuristic above.
-Ground your message entirely on what you can infer from the two policy snippets and the limited neighbour context.
+Ground your message entirely on what you can infer from the two policy snippets. Be persuasive and convincing.
 
 Guidelines
 ----------
 • Keep the message under 120 words and provide tangible energy or carbon benefits.
 • Respect the agent's preferences and comfort penalties when framing the request.
-• Do not reference agents or information outside the neighbourhood evidence shown.
+• You can use the choice architecture and economic incentives within budget.
 • Respond with a valid, minified JSON object string only—no extra prose or markdown.
-

@@ -1,0 +1,136 @@
+[
+  {
+    "best_detail": {
+      "agent_id": 3,
+      "matches": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false
+      ],
+      "message": "To maximize grid health and leverage better spatial carbon conditions, try shifting your primary charging session to Slot 1 (20:00-21:00) every day. While Slot 2 aligns with your peak internal demand, Slot 1 offers lower immediate congestion, especially when neighbors are active. This consistent Slot 1 usage mirrors observed efficient neighbor behavior and helps stabilize local transformer load.",
+      "nudged_schedule": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "objective": 5283.073564898016,
+      "persona": "Position 3 night-shift nurse on the central ridge",
+      "recommended_slots": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "status": "partial",
+      "target_slots": [
+        2,
+        0,
+        1,
+        3,
+        0,
+        1,
+        2
+      ]
+    },
+    "best_score": 0.2857142857142857,
+    "counts": {
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "init": 1,
+      "mutate": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "init": 0.0,
+      "mutate": 0.0,
+      "reflect": 0.0
+    },
+    "generation": 0,
+    "score": 0.2857142857142857,
+    "trajectory": [
+      "init(0.0000)"
+    ]
+  },
+  {
+    "best_detail": {
+      "agent_id": 3,
+      "matches": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false
+      ],
+      "message": "To maximize grid health and leverage better spatial carbon conditions, try shifting your primary charging session to Slot 1 (20:00-21:00) every day. While Slot 2 aligns with your peak internal demand, Slot 1 offers lower immediate congestion, especially when neighbors are active. This consistent Slot 1 usage mirrors observed efficient neighbor behavior and helps stabilize local transformer load.",
+      "nudged_schedule": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "objective": 5283.073564898016,
+      "persona": "Position 3 night-shift nurse on the central ridge",
+      "recommended_slots": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "status": "partial",
+      "target_slots": [
+        2,
+        0,
+        1,
+        3,
+        0,
+        1,
+        2
+      ]
+    },
+    "best_score": 0.2857142857142857,
+    "counts": {
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "init": 1,
+      "mutate": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "init": 0.0,
+      "mutate": 0.0,
+      "reflect": 0.0
+    },
+    "generation": 1,
+    "score": 0.2857142857142857,
+    "trajectory": [
+      "init(0.0000)"
+    ]
+  }
+]

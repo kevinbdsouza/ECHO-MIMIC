@@ -8,6 +8,7 @@ import random
 import logging
 from functools import wraps
 from typing import Callable, Any, Optional
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import google.generativeai as genai
 
 # Set up logging
@@ -32,7 +33,8 @@ class RateLimiter:
                  max_delay: float = 60.0,
                  backoff_factor: float = 2.0,
                  jitter: bool = True,
-                 requests_per_minute: int = 14):  # Conservative limit for free tier
+                 requests_per_minute: int = 14,  # Conservative limit for free tier
+                 timeout_seconds: float = 300.0):  # 5 minutes default timeout
         """
         Initialize the rate limiter.
         
@@ -43,6 +45,7 @@ class RateLimiter:
             backoff_factor: Exponential backoff multiplier
             jitter: Whether to add random jitter to delays
             requests_per_minute: Rate limit for requests per minute
+            timeout_seconds: Maximum time to wait for an API call before timing out
         """
         self.max_retries = max_retries
         self.base_delay = base_delay
@@ -50,6 +53,7 @@ class RateLimiter:
         self.backoff_factor = backoff_factor
         self.jitter = jitter
         self.requests_per_minute = requests_per_minute
+        self.timeout_seconds = timeout_seconds
         
         # Track request timestamps for rate limiting
         self.request_times = []
@@ -136,30 +140,36 @@ class RateLimiter:
                 # Record the request time
                 self.request_times.append(time.time())
                 
-                # Execute the function
-                result = func(*args, **kwargs)
+                # Execute the function with a hard timeout to avoid indefinite hangs
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(func, *args, **kwargs)
+                    result = future.result(timeout=self.timeout_seconds)
                 
                 # If successful, return the result
                 return result
                 
+            except FutureTimeoutError:
+                error = TimeoutError(f"Operation timed out after {self.timeout_seconds} seconds")
+                last_error = error
             except Exception as error:
                 last_error = error
                 
                 # Check if this is a rate limit error
-                if not self._is_rate_limit_error(error):
+                if not self._is_rate_limit_error(error) and not isinstance(error, TimeoutError):
                     # If it's not a rate limit error, re-raise immediately
                     raise error
                 
                 # If this is the last attempt, raise the error
                 if attempt == self.max_retries:
                     logger.error(f"All {self.max_retries} retry attempts exhausted")
-                    raise RateLimitError(f"Rate limit exceeded after {self.max_retries} retries: {error}")
+                    raise RateLimitError(f"Rate limit/timeout after {self.max_retries} retries: {error}")
                 
                 # Calculate delay for next attempt
                 suggested_delay = self._get_retry_delay_from_error(error)
                 delay = self._calculate_delay(attempt, suggested_delay)
                 
-                logger.warning(f"Rate limit hit (attempt {attempt + 1}/{self.max_retries + 1}), "
+                reason = "Rate limit hit" if self._is_rate_limit_error(error) else "Operation timed out"
+                logger.warning(f"{reason} (attempt {attempt + 1}/{self.max_retries + 1}), "
                              f"retrying in {delay:.1f} seconds... Error: {error}")
                 
                 time.sleep(delay)

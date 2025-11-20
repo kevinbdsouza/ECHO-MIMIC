@@ -3,29 +3,29 @@ MIMIC Stage 4 (Nudging) — Agent {agent_id}
 
 Persona context
 ---------------
-{persona}
-
-Neighbour exemplars (still the only observations available)
-----------------------------------------------------------
-{neighbor_examples}
+persona: {persona}
+location: {location}
+base_demand: {base_demand}
 
 Current heuristics snapshot
 ---------------------------
 Local imitation code:
+# This is what the agent is currently following for personal goals
 {local_policy}
 
 Global coordination code:
+# This is what the agent should follow for common global goals
 {global_policy}
 
 Task
 ----
 Create a JSON object with keys ``persona``, ``recommended_slots`` (seven daily indices), and ``message`` that nudges this persona
 from their local behaviour towards the coordinated recommendation implied by the global heuristic above.
-Ground your message entirely on what you can infer from the two policy snippets and the limited neighbour context.
+Ground your message entirely on what you can infer from the two policy snippets. Be persuasive and convincing.
 
 Guidelines
 ----------
 • Keep the message under 120 words and provide tangible energy or carbon benefits.
 • Respect the agent's preferences and comfort penalties when framing the request.
-• Do not reference agents or information outside the neighbourhood evidence shown.
+• You can use the choice architecture and economic incentives within budget.
 • Respond with a valid, minified JSON object string only—no extra prose or markdown.

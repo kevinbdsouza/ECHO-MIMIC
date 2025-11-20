@@ -1,16 +1,20 @@
 ECHO Stage 2 (Imitation) — Agent 5
 ==========================================
 
-Scenario id: ev_peak_sharing_1
-Slots (index → hour): 0: 19-20, 1: 20-21, 2: 21-22, 3: 22-23
-Retail tariff ($/kWh): 0.23, 0.24, 0.27, 0.30
-Grid carbon intensity (gCO2/kWh): 700, 480, 500, 750
-Feeder capacity (kW equivalent): 6.8
-Baseline non-EV load (kW): 5.2, 5.0, 4.9, 6.5
-Minimum EV sessions per slot: 0: 1, 1: 1, 2: 1, 3: 1
-Maximum EV sessions per slot: 0: 2, 1: 2, 2: 1, 3: 2
-Spatial carbon gradient (location → gCO2/kWh): 1: 440, 460, 490, 604 | 2: 483, 431, 471, 600 | 3: 503, 473, 471, 577 | 4: 617, 549, 479, 363 | 5: 411, 376, 554, 623
-7-day feeder outlook:
+Goal: choose the slot that you think the agents would follow according to their personal objectives. Don't worry about global goals like carbon or congestion unless dictated by your personality.
+
+Forecast note: observed tariffs, baseline load, and carbon intensity may drift by up to ±20% from the values below because of real-world noise.
+
+scenario_id: ev_peak_sharing_1
+slots: 0: 19-20, 1: 20-21, 2: 21-22, 3: 22-23
+price: 0.23, 0.24, 0.27, 0.30
+carbon_intensity: 700, 480, 500, 750
+capacity: 6.8
+baseline_load: 5.2, 5.0, 4.9, 6.5
+slot_min_sessions: 0: 1, 1: 1, 2: 1, 3: 1
+slot_max_sessions: 0: 2, 1: 2, 2: 1, 3: 2
+spatial_carbon: 1: 440, 460, 490, 604 | 2: 483, 431, 471, 600 | 3: 503, 473, 471, 577 | 4: 617, 549, 479, 363 | 5: 411, 376, 554, 623
+days:
   Day 1 (Day 1 — Clear start to the week with feeders expecting full-slot coverage.)
     Tariff: 0.20, 0.25, 0.29, 0.32
     Carbon: 490, 470, 495, 540
@@ -49,16 +53,20 @@ Spatial carbon gradient (location → gCO2/kWh): 1: 440, 460, 490, 604 | 2: 483,
 
 Your profile
 ------------
-Persona: Position 5 graduate tenant commuting late from campus
-Feeder location: 5
-Base demand per slot: 0.50, 0.70, 0.60, 0.90
-Preferred slots: 0, 1
-Comfort penalty when deviating: 0.12
+persona: Position 5 graduate tenant commuting late from campus
+location: 5
+base_demand: 0.50, 0.70, 0.60, 0.90
 
-Observed neighbour exemplars
-----------------------------
-- Neighbor 4 → slot 3 (Retirees stayed in slot 3 to watch overnight voltage)
-- Neighbor 1 → slot 2 (Battery neighbor flexed to slot 2 when carbon dipped there)
+neighbor_examples
+-----------------
+- Neighbor 4 — Position 4 retirees guarding comfort and grid warnings (location 4)
+  Base demand: 0.90, 0.60, 0.70, 0.80
+  Preferred slots: 0, 3 | Comfort penalty: 0.16
+  Ground truth min-cost slots by day: Day 1: [0]; Day 2: [0]; Day 3: [0]; Day 4: [0]; Day 5: [0]; Day 6: [3]; Day 7: [0]
+- Neighbor 1 — Position 1 battery engineer balancing budget and solar backfeed (location 1)
+  Base demand: 1.20, 0.70, 0.80, 0.60
+  Preferred slots: 0, 2 | Comfort penalty: 0.18
+  Ground truth min-cost slots by day: Day 1: [0]; Day 2: [2]; Day 3: [2]; Day 4: [0]; Day 5: [0]; Day 6: [2]; Day 7: [2]
 
 Task
 ----
@@ -73,6 +81,4 @@ Constraints
 • Use only the information in this prompt. Other agents' private data must remain hidden.
 • Preserve the JSON output format and keep the payload to a list of seven integers.
 • Do not attempt to coordinate with non-neighbour agents at this stage.
-• ``scenario.json`` resides two directories up (``../../scenario.json``) from this agent folder—derive paths programmatically.
 • Respond with only valid Python code representing the full contents of ``policy.py``; do not include commentary or markdown fences.
-

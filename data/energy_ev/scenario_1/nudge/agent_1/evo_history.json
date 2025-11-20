@@ -1,0 +1,136 @@
+[
+  {
+    "best_detail": {
+      "agent_id": 1,
+      "matches": [
+        true,
+        true,
+        false,
+        true,
+        true,
+        false,
+        false
+      ],
+      "message": "Your budget focus aligns well with prioritizing Slot 1 (20-21h), which consistently offers low tariffs while reducing strain on the network compared to later spikes. By focusing on Slot 1 and selectively using Slot 0 only when its price is significantly lower (Day 4), we minimize your cost while cooperating with Neighbor 2's transformer headroom goals, saving an estimated $0.15 and 5kg CO2 across the week.",
+      "nudged_schedule": [
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "objective": 5283.073564898016,
+      "persona": "Position 1 battery engineer balancing budget and solar backfeed",
+      "recommended_slots": [
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "status": "partial",
+      "target_slots": [
+        0,
+        1,
+        2,
+        0,
+        1,
+        2,
+        0
+      ]
+    },
+    "best_score": 0.5714285714285714,
+    "counts": {
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "init": 1,
+      "mutate": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "init": 0.0,
+      "mutate": 0.0,
+      "reflect": 0.0
+    },
+    "generation": 0,
+    "score": 0.5714285714285714,
+    "trajectory": [
+      "init(0.0000)"
+    ]
+  },
+  {
+    "best_detail": {
+      "agent_id": 1,
+      "matches": [
+        true,
+        true,
+        false,
+        true,
+        true,
+        false,
+        true
+      ],
+      "message": "To optimize budget while respecting collective stability, align your charging primarily with Slot 1 (20-21h). Global analysis shows Slot 1 offers the best blend of low tariff and grid carbon reduction (averaging 480g/kWh). While Slot 0 is marginally cheaper, Slot 1 better supports transformer health, minimizing potential coordination penalties observed in Days 2 and 6.",
+      "nudged_schedule": [
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0
+      ],
+      "objective": 5283.073564898016,
+      "persona": "Position 1 battery engineer balancing budget and solar backfeed",
+      "recommended_slots": [
+        1,
+        1,
+        1,
+        2,
+        1,
+        2,
+        1
+      ],
+      "status": "partial",
+      "target_slots": [
+        0,
+        1,
+        2,
+        0,
+        1,
+        2,
+        0
+      ]
+    },
+    "best_score": 0.7142857142857143,
+    "counts": {
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "init": 1,
+      "mutate": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "init": 0.0,
+      "mutate": 0.0,
+      "reflect": 0.0
+    },
+    "generation": 1,
+    "score": 0.7142857142857143,
+    "trajectory": [
+      "init(0.0000)"
+    ]
+  }
+]

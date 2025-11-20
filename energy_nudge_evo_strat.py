@@ -61,8 +61,36 @@ def _completion_text(completion: genai.types.GenerateContentResponse) -> str:
 
 
 def _normalise_message(raw_text: str) -> str:
-    payload = json.loads(raw_text)
-    return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    """Coerce model output into compact JSON, tolerating stray formatting."""
+    text = raw_text.strip()
+    if not text:
+        raise ValueError("Model returned an empty response for the nudge request")
+
+    # Try the raw text first, then fall back to common fence/extra-text patterns.
+    candidates = [text]
+    if text.startswith("```"):
+        unwrapped = text
+        for prefix in ("```json", "```"):
+            if unwrapped.startswith(prefix):
+                unwrapped = unwrapped[len(prefix):]
+                break
+        if unwrapped.endswith("```"):
+            unwrapped = unwrapped[:-3]
+        candidates.append(unwrapped.strip())
+
+    brace_start = text.find("{")
+    brace_end = text.rfind("}")
+    if brace_start != -1 and brace_end != -1 and brace_end > brace_start:
+        candidates.append(text[brace_start : brace_end + 1].strip())
+
+    for candidate in candidates:
+        try:
+            payload = json.loads(candidate)
+            return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+        except json.JSONDecodeError:
+            continue
+
+    raise ValueError(f"Model response is not valid JSON: {text[:200]}")
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +313,8 @@ def run(
         history.append(
             {
                 "generation": generation,
+                # Keep both 'score' and 'best_score' for compatibility with plotting helpers.
+                "score": best["score"],
                 "best_score": best["score"],
                 "best_detail": best.get("detail"),
                 "trajectory": best.get("trajectory"),
@@ -299,32 +329,41 @@ def run(
         if generation == generations:
             break
 
-        operator_cycle = ("mutate", "crossover", "evolve_1", "evolve_2")
         offspring: List[Dict[str, object]] = []
-        while len(offspring) < inner_loop_size:
-            op_name = operator_cycle[len(offspring) % len(operator_cycle)]
-            try:
-                if op_name == "mutate":
-                    parent = rng.choice(population)
-                    child = _mutate_message(prompt, parent, model)
-                elif op_name == "crossover":
-                    parents = rng.sample(population, k=2)
-                    child = _crossover_message(prompt, parents[0], parents[1], model)
-                elif op_name == "evolve_1":
-                    parents = rng.sample(population, k=2)
-                    child = _evolve_message(prompt, parents[0], parents[1], model, explore_new=True)
-                else:
-                    parents = rng.sample(population, k=2)
-                    child = _evolve_message(prompt, parents[0], parents[1], model, explore_new=False)
-                offspring.append(child)
-            except Exception as exc:
-                print(f"[warn] {op_name} failed: {exc}")
+
+        # Always allow selection to consider the unchanged population.
+        for parent in population:
+            offspring.append(
+                {
+                    "message": parent["message"],
+                    "score": 0.0,
+                    "detail": {},
+                    "counts": parent["counts"].copy(),
+                    "fitness_deltas": parent["fitness_deltas"].copy(),
+                    "trajectory": parent["trajectory"][:],
+                }
+            )
+
+        # For each inner loop slot, attempt every operator variant.
+        for _ in range(inner_loop_size):
+            parent_a = rng.choice(population)
+            parent_b = rng.choice(population)
+            for op_name, builder in (
+                ("mutate", lambda: _mutate_message(prompt, parent_a, model)),
+                ("crossover", lambda: _crossover_message(prompt, parent_a, parent_b, model)),
+                ("evolve_1", lambda: _evolve_message(prompt, parent_a, parent_b, model, explore_new=True)),
+                ("evolve_2", lambda: _evolve_message(prompt, parent_a, parent_b, model, explore_new=False)),
+            ):
+                try:
+                    offspring.append(builder())
+                except Exception as exc:
+                    print(f"[warn] {op_name} failed: {exc}")
 
         offspring = [evaluate(child) for child in offspring]
         reflect_children = _reflect_messages(prompt, population, model)
         reflect_children = [evaluate(child) for child in reflect_children]
 
-        combined = population + offspring + reflect_children
+        combined = offspring + reflect_children
         combined.sort(key=lambda cand: cand["score"], reverse=True)
         population = combined[: population_size]
 
@@ -351,13 +390,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         default=Path("data/energy_ev/scenario_1"),
         help="Directory containing scenario.json and agent subfolders.",
     )
-    parser.add_argument("--agent-id", type=int, required=True, help="Target agent id to optimise.")
-    parser.add_argument("--population-size", type=int, default=8, help="Population size for the ES loop.")
-    parser.add_argument("--generations", type=int, default=6, help="Number of generations to evolve.")
+    parser.add_argument("--agent-id", type=int, default=5, help="Target agent id to optimise.")
+    parser.add_argument("--population-size", type=int, default=5, help="Population size for the ES loop.")
+    parser.add_argument("--generations", type=int, default=1, help="Number of generations to evolve.")
     parser.add_argument(
         "--inner-loop-size",
         type=int,
-        default=12,
+        default=1,
         help="Number of offspring attempts per generation.",
     )
     parser.add_argument("--seed", type=int, default=23, help="Random seed for reproducibility.")

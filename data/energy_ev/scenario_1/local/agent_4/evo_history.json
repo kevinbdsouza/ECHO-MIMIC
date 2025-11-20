@@ -1,0 +1,144 @@
+[
+  {
+    "best_detail": {
+      "agent_id": 4,
+      "best": [
+        [
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0
+        ],
+        [
+          3
+        ],
+        [
+          0
+        ]
+      ],
+      "matches": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true
+      ],
+      "schedule": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "status": "partial"
+    },
+    "best_score": 0.8571428571428571,
+    "counts": {
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "init": 1,
+      "mutate": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "init": 0.0,
+      "mutate": 0.0,
+      "reflect": 0.0
+    },
+    "generation": 0,
+    "mean_score": 0.17142857142857143,
+    "population_size": 5,
+    "score": 0.8571428571428571,
+    "trajectory": [
+      "init(0.0000)"
+    ]
+  },
+  {
+    "best_detail": {
+      "agent_id": 4,
+      "best": [
+        [
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0
+        ],
+        [
+          0
+        ],
+        [
+          3
+        ],
+        [
+          0
+        ]
+      ],
+      "matches": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true
+      ],
+      "schedule": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "status": "partial"
+    },
+    "best_score": 0.8571428571428571,
+    "counts": {
+      "crossover": 0,
+      "evolve_1": 0,
+      "evolve_2": 0,
+      "init": 1,
+      "mutate": 0,
+      "reflect": 0
+    },
+    "fitness_deltas": {
+      "crossover": 0.0,
+      "evolve_1": 0.0,
+      "evolve_2": 0.0,
+      "init": 0.0,
+      "mutate": 0.0,
+      "reflect": 0.0
+    },
+    "generation": 1,
+    "mean_score": 0.2,
+    "population_size": 5,
+    "score": 0.8571428571428571,
+    "trajectory": [
+      "init(0.0000)"
+    ]
+  }
+]
