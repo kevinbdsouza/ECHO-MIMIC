@@ -547,7 +547,7 @@ def run(
         "Your final message to the farmer should be in this format \\communication{message}. \n\n"
     )
 
-    farms_dir = cfg.data_dir
+    farms_dir = cfg.farms_dir
     target_farm_ids = farm_ids or [3]
 
     for farm_identifier in target_farm_ids:
