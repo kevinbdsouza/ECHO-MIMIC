@@ -98,25 +98,24 @@ high-level experiment drivers remain as top-level scripts.
    
 ## Usage
 
-### ECHO-MIMIC Framework Experiments
+### Unified Orchestrator
 
-#### Stage 2: Learn Baseline Heuristics (ECHO)
+Run any combination of domain, mode, and method from a single entry point:
+
 ```bash
-python farm_evo_strat.py        # Evolutionary approach
-python dspy_baseline_farm.py    # DSPy baseline comparison
+# Echo-MIMIC, farm domain, local heuristic optimization
+python main.py --domain farm --mode local --method echo_mimic --agent-id alpha
+
+# DSPy baseline for global farm heuristics
+python main.py --domain farm --mode global --method dspy
+
+# Energy domain with the lightweight AutoGen-style planner
+python main.py --domain energy --mode nudge --method autogen --model gpt-4o-mini
 ```
 
-#### Stage 3: Learn Global Heuristics (ECHO)
-```bash
-python graph_evo_strat.py       # Evolutionary approach
-python dspy_baseline_global.py  # DSPy baseline comparison
-```
-
-#### Stage 4: Nudging Mechanisms (MIMIC)
-```bash
-python nudge_evo_strat.py       # Evolutionary approach
-python dspy_baseline_nudge.py   # DSPy baseline comparison
-```
+The orchestrator also accepts `--population-size`, `--num-generations`,
+`--inner-loop-size`, `--use-template`, `--no-hint`, `--halstead-metrics`, and
+`--no-init` to fine-tune runs per scenario.
 
 ### Carbon-Aware EV Charging Scenario
 
