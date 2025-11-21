@@ -9,6 +9,57 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
+_FOCUS_SHARE = 0.65
+_BACKGROUND_EPS = 1e-3
+
+
+def _base_weights(agent: "AgentConfig") -> List[float]:
+    weights = [max(float(value), 0.0) + _BACKGROUND_EPS for value in agent.base_demand]
+    total = sum(weights)
+    if total <= 0.0:
+        size = max(len(weights), 1)
+        return [1.0 / size for _ in range(size)]
+    return [value / total for value in weights]
+
+
+def _zero_usage(agent: "AgentConfig") -> List[float]:
+    return [0.0 for _ in agent.base_demand]
+
+
+def usage_vector_for_slot(agent: "AgentConfig", slot: int) -> List[float]:
+    """Return a per-slot usage row highlighting the chosen slot while keeping background demand."""
+
+    num_slots = len(agent.base_demand)
+    if slot < 0 or slot >= num_slots:
+        raise ValueError(f"Slot index {slot} is out of bounds for {num_slots} slots")
+    weights = _base_weights(agent)
+    focus = min(max(_FOCUS_SHARE, 0.0), 1.0)
+    remainder = 1.0 - focus
+    usage = [weight * remainder for weight in weights]
+    usage[int(slot)] += focus
+    return usage
+
+
+def usage_matrix_for_allocation(
+    agent: "AgentConfig",
+    allocation: Sequence[int],
+) -> List[List[float]]:
+    """Convert a list of slot indices into a usage matrix for ``agent``."""
+
+    return [usage_vector_for_slot(agent, int(slot)) for slot in allocation]
+
+
+def average_usage_for_slots(agent: "AgentConfig", slots: Sequence[int]) -> List[float]:
+    """Return the mean usage vector across the provided ``slots``."""
+
+    if not slots:
+        return _zero_usage(agent)
+    vectors = [usage_vector_for_slot(agent, int(slot)) for slot in slots]
+    return [
+        sum(values) / len(vectors)
+        for values in zip(*vectors)
+    ]
+
 
 @dataclass(frozen=True)
 class DayProfile:
@@ -340,10 +391,24 @@ def dump_ground_truth(directory: Path, scenario: EVScenario) -> None:
     local_dir.mkdir(parents=True, exist_ok=True)
 
     local_optima = enumerate_local_optima(scenario)
+    num_slots = len(scenario.slots)
+    agent_lookup = {agent.id: agent for agent in scenario.agents}
+
+    def _canonical_usage(agent: AgentConfig, day_slots: Sequence[int]) -> List[float]:
+        return average_usage_for_slots(agent, day_slots)
+
     local_path = local_dir / "ground_truth.json"
-    local_payload = {
-        str(agent_id): slots_by_day for agent_id, slots_by_day in local_optima.items()
-    }
+    local_payload: Dict[str, Dict[str, object]] = {}
+    for agent_id, slots_by_day in local_optima.items():
+        agent_cfg = agent_lookup.get(agent_id)
+        if agent_cfg is None:
+            continue
+        local_payload[str(agent_id)] = {
+            "best_slot_options_by_day": slots_by_day,
+            "best_usage_by_day": [
+                _canonical_usage(agent_cfg, day_slots) for day_slots in slots_by_day
+            ],
+        }
     local_path.write_text(
         json.dumps(local_payload, indent=2) + "\n",
         encoding="utf-8",
@@ -355,7 +420,11 @@ def dump_ground_truth(directory: Path, scenario: EVScenario) -> None:
         agent_local_payload = {
             "agent_id": agent.id,
             "persona": agent.persona,
-            "best_slots_by_day": local_optima.get(agent.id, []),
+            "best_slot_options_by_day": local_optima.get(agent.id, []),
+            "best_usage_by_day": [
+                _canonical_usage(agent, day_slots)
+                for day_slots in local_optima.get(agent.id, [])
+            ],
         }
         agent_local_path = agent_local_dir / "ground_truth.json"
         agent_local_path.write_text(
@@ -386,10 +455,14 @@ def dump_ground_truth(directory: Path, scenario: EVScenario) -> None:
     for idx, agent in enumerate(scenario.agents, start=1):
         agent_global_dir = global_dir / f"agent_{agent.id}"
         agent_global_dir.mkdir(parents=True, exist_ok=True)
+        recommended_slots = [int(day[idx - 1]) for day in global_opt]
         agent_global_payload = {
             "agent_id": agent.id,
             "persona": agent.persona,
-            "recommended_slots": [int(day[idx - 1]) for day in global_opt],
+            "recommended_slots": recommended_slots,
+            "recommended_usage": [
+                usage_vector_for_slot(agent, slot) for slot in recommended_slots
+            ],
             "objective": global_score,
         }
         agent_global_path = agent_global_dir / "ground_truth.json"
@@ -413,11 +486,19 @@ def dump_ground_truth(directory: Path, scenario: EVScenario) -> None:
     for idx, agent in enumerate(scenario.agents, start=1):
         agent_nudge_dir = nudge_dir / f"agent_{agent.id}"
         agent_nudge_dir.mkdir(parents=True, exist_ok=True)
+        recommended_slots = [int(day[idx - 1]) for day in global_opt]
         agent_nudge_payload = {
             "agent_id": agent.id,
             "persona": agent.persona,
-            "recommended_slots": [int(day[idx - 1]) for day in global_opt],
-            "local_best_slots_by_day": local_optima.get(agent.id, []),
+            "recommended_slots": recommended_slots,
+            "recommended_usage": [
+                usage_vector_for_slot(agent, slot) for slot in recommended_slots
+            ],
+            "local_best_slot_options_by_day": local_optima.get(agent.id, []),
+            "local_best_usage_by_day": [
+                _canonical_usage(agent, day_slots)
+                for day_slots in local_optima.get(agent.id, [])
+            ],
             "notes": "Nudge messages should reconcile the agent's imitation heuristic with the coordinated recommendation.",
         }
         agent_nudge_path = agent_nudge_dir / "context.json"

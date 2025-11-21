@@ -63,26 +63,26 @@ neighbor_examples
 - Neighbor 1 — Position 1 battery engineer balancing budget and solar backfeed (location 1)
   Base demand: 1.20, 0.70, 0.80, 0.60
   Preferred slots: 0, 2 | Comfort penalty: 0.18
-  Ground truth min-cost slots by day: Day 1: [0]; Day 2: [1]; Day 3: [2]; Day 4: [0]; Day 5: [1]; Day 6: [2]; Day 7: [0]
+  Ground truth usage by day: Day 1: [0.78, 0.07, 0.08, 0.06]; Day 2: [0.13, 0.72, 0.08, 0.06]; Day 3: [0.13, 0.07, 0.73, 0.06]; Day 4: [0.78, 0.07, 0.08, 0.06]; Day 5: [0.13, 0.72, 0.08, 0.06]; Day 6: [0.13, 0.07, 0.73, 0.06]; Day 7: [0.78, 0.07, 0.08, 0.06]
 - Neighbor 4 — Position 4 retirees guarding comfort and grid warnings (location 4)
   Base demand: 0.90, 0.60, 0.70, 0.80
   Preferred slots: 0, 3 | Comfort penalty: 0.16
-  Ground truth min-cost slots by day: Day 1: [3]; Day 2: [3]; Day 3: [3]; Day 4: [2]; Day 5: [3]; Day 6: [3]; Day 7: [3]
+  Ground truth usage by day: Day 1: [0.10, 0.07, 0.08, 0.74]; Day 2: [0.10, 0.07, 0.08, 0.74]; Day 3: [0.10, 0.07, 0.08, 0.74]; Day 4: [0.10, 0.07, 0.73, 0.09]; Day 5: [0.10, 0.07, 0.08, 0.74]; Day 6: [0.10, 0.07, 0.08, 0.74]; Day 7: [0.10, 0.07, 0.08, 0.74]
 
 Goal
 ----
-Design Python heuristics that choose a slot for this agent on each of the next seven days to satisfy common global goals (minimize carbon, congestion) and not just personal ones, coordinating only with the neighbour information you can observe.
+Design Python heuristics that allocate per-slot usage for this agent on each of the next seven days to satisfy common global goals (minimize carbon, congestion) and not just personal ones, using only the neighbour information you can observe.
 
 Output specification
 --------------------
 1. Load ``scenario.json`` using only paths visible from the agent directory.
-2. Decide on a slot recommendation for this agent for each day that balances local comfort with global coordination.
-3. Write ``global_policy_output.json`` containing a list of seven slot indices for this agent.
+2. Decide on per-slot usage allocations for this agent for each day that balance local comfort with global coordination.
+3. Write ``global_policy_output.json`` containing a list of seven usage vectors (one per day, each covering every slot with values between 0 and 1).
 4. Save the executable script as ``policy.py`` so ``python policy.py`` recreates ``global_policy_output.json`` inside this folder.
 
 Keep reasoning local
 --------------------
 • Do not assume knowledge of non-neighbour households.
 • Explainable heuristics that can be combined with other agents will be favoured downstream.
-• Your output will be compared against the globally optimal allocation for this agent.
+• Your output will be compared against the globally optimal usage allocation for this agent.
 • Return only the Python source of ``policy.py``; omit explanations, markdown, or additional text.

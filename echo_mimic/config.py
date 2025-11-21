@@ -12,9 +12,9 @@ class Config:
 
         # DSPy configuration values
         self.lm = "gemini-flash-lite-latest"
-        self.auto = "heavy"
-        self.trials = 50
-        self.seed = 9
+        self.auto = "light"
+        self.trials = 2
+        self.seed = 1
         
         # Rate limiting configuration
         self.rate_limit = {

@@ -1,6 +1,6 @@
 [
   {
-    "score": 0.8571428571428571,
+    "score": 0.7254050314041135,
     "trajectory": [
       "init(0.0000)"
     ],
@@ -22,74 +22,7 @@
     }
   },
   {
-    "score": 0.8571428571428571,
-    "trajectory": [
-      "init(0.0000)",
-      "reflect(+0.0000)"
-    ],
-    "counts": {
-      "init": 1,
-      "mutate": 0,
-      "crossover": 0,
-      "evolve_1": 0,
-      "evolve_2": 0,
-      "reflect": 1
-    },
-    "fitness_deltas": {
-      "init": 0.0,
-      "mutate": 0.0,
-      "crossover": 0.0,
-      "evolve_1": 0.0,
-      "evolve_2": 0.0,
-      "reflect": 0.0
-    }
-  },
-  {
-    "score": 0.7142857142857143,
-    "trajectory": [
-      "init(0.0000)"
-    ],
-    "counts": {
-      "init": 1,
-      "mutate": 0,
-      "crossover": 0,
-      "evolve_1": 0,
-      "evolve_2": 0,
-      "reflect": 0
-    },
-    "fitness_deltas": {
-      "init": 0.0,
-      "mutate": 0.0,
-      "crossover": 0.0,
-      "evolve_1": 0.0,
-      "evolve_2": 0.0,
-      "reflect": 0.0
-    }
-  },
-  {
-    "score": 0.42857142857142855,
-    "trajectory": [
-      "init(0.0000)"
-    ],
-    "counts": {
-      "init": 1,
-      "mutate": 0,
-      "crossover": 0,
-      "evolve_1": 0,
-      "evolve_2": 0,
-      "reflect": 0
-    },
-    "fitness_deltas": {
-      "init": 0.0,
-      "mutate": 0.0,
-      "crossover": 0.0,
-      "evolve_1": 0.0,
-      "evolve_2": 0.0,
-      "reflect": 0.0
-    }
-  },
-  {
-    "score": 0.42857142857142855,
+    "score": 0.7254050314041135,
     "trajectory": [
       "init(0.0000)",
       "mutate(+0.0000)"

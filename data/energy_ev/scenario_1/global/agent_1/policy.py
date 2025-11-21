@@ -1,2 +1,5 @@
-day_key = list(scenario['days'].keys())[day_index]
-    day_data = scenario['days'][day_key]
+mock_scenario = {
+            # ... other keys
+            "location": 1, # <-- This key exists here
+            # ... other keys
+        }

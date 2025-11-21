@@ -20,12 +20,14 @@ from ...common import (
     pushd,
 )
 from ...config import Config
-from ...rate_limiter import send_message_with_retry
+from ...common.rate_limiter import send_message_with_retry
 from .scenario import (
+    AgentConfig,
     EVScenario,
     enumerate_global_optimum,
     enumerate_local_optima,
     compute_global_cost,
+    usage_vector_for_slot,
 )
 
 _capture = CommandOutputCapture()
@@ -34,11 +36,12 @@ _rate_limiter = ensure_rate_limiter(_cfg)
 _AGENT_SYSTEM_INSTRUCTION = (
     "You are an EV owner deciding whether to adjust your personal charging heuristic. "
     "Only rewrite your policy if a received nudge benefits you on any of the things you care about. "
-    "Always return a complete, executable Python script that writes local_policy_output.json with seven slot indices."
+    "Always return a complete, executable Python script that writes local_policy_output.json with seven daily usage rows "
+    "covering every slot with values between 0 and 1."
 )
 _AGENT_FIX_INSTRUCTION = (
     "You debug Python scripts authored by EV owners reacting to nudges. "
-    "Given the code and stderr, return a corrected script that writes seven integers to local_policy_output.json "
+    "Given the code and stderr, return a corrected script that writes seven per-day usage vectors to local_policy_output.json "
     "and performs no other IO or side effects."
 )
 
@@ -63,6 +66,134 @@ def _coerce_schedule(payload: Sequence[object], *, num_days: int) -> List[int]:
         return [int(value) for value in payload]
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Non-integer slot detected: {payload}") from exc
+
+
+def _slot_to_usage(agent: AgentConfig, slot: int) -> List[float]:
+    return usage_vector_for_slot(agent, slot)
+
+
+def _coerce_usage_matrix(
+    payload: Sequence[object],
+    *,
+    num_days: int,
+    num_slots: int,
+    agent: AgentConfig,
+) -> List[List[float]]:
+    try:
+        schedule = _coerce_schedule(payload, num_days=num_days)
+    except ValueError:
+        schedule = None
+    else:
+        return [_slot_to_usage(agent, slot) for slot in schedule]
+
+    if not isinstance(payload, Sequence) or isinstance(payload, (str, bytes)):
+        raise ValueError("Usage plan must be a sequence of daily entries")
+    if len(payload) != num_days:
+        raise ValueError("Usage plan must provide entries for every day")
+
+    usage_matrix: List[List[float]] = []
+    for day_idx, entry in enumerate(payload, start=1):
+        if not isinstance(entry, Sequence) or isinstance(entry, (str, bytes)):
+            raise ValueError(f"Day {day_idx} usage must be a numeric sequence")
+        if len(entry) != num_slots:
+            raise ValueError(
+                f"Day {day_idx} usage must specify exactly {num_slots} slot values"
+            )
+        row: List[float] = []
+        for slot_idx, value in enumerate(entry):
+            try:
+                usage_value = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Slot {slot_idx} on day {day_idx} contains a non-numeric usage value"
+                ) from exc
+            if usage_value < 0.0 or usage_value > 1.0:
+                raise ValueError(
+                    f"Slot {slot_idx} on day {day_idx} has usage {usage_value}, expected [0, 1]"
+                )
+            row.append(usage_value)
+        usage_matrix.append(row)
+    return usage_matrix
+
+
+def _usage_row_error(
+    usage_row: Sequence[float],
+    target_rows: Sequence[Sequence[float]],
+) -> float:
+    if not target_rows:
+        return 1.0
+    errors: List[float] = []
+    for target in target_rows:
+        diffs = [abs(float(a) - float(b)) for a, b in zip(usage_row, target)]
+        if diffs:
+            errors.append(sum(diffs) / len(diffs))
+    if not errors:
+        return 1.0
+    return min(errors)
+
+
+def _score_usage_matrix(
+    usage_matrix: Sequence[Sequence[float]],
+    target_rows_by_day: Sequence[Sequence[Sequence[float]]],
+) -> Tuple[float, List[float]]:
+    if len(usage_matrix) != len(target_rows_by_day):
+        raise ValueError("Usage matrix and target rows must have the same number of days")
+    per_day_errors = [
+        _usage_row_error(usage_row, target_rows)
+        for usage_row, target_rows in zip(usage_matrix, target_rows_by_day)
+    ]
+    if not per_day_errors:
+        return 0.0, []
+    mean_error = sum(per_day_errors) / len(per_day_errors)
+    return max(0.0, 1.0 - mean_error), per_day_errors
+
+
+def _get_agent_config(scenario: EVScenario, agent_id: int) -> AgentConfig | None:
+    for agent in scenario.agents:
+        if agent.id == agent_id:
+            return agent
+    return None
+
+
+def _candidate_rows_from_slots(
+    agent: AgentConfig,
+    slots: Sequence[int],
+) -> List[List[float]]:
+    if not slots:
+        return [[0.0 for _ in agent.base_demand]]
+    return [_slot_to_usage(agent, int(slot)) for slot in slots]
+
+
+def _load_ground_truth_usage_matrix(
+    agent_dir: Path,
+    *,
+    scenario: EVScenario,
+    agent: AgentConfig,
+) -> Optional[List[List[float]]]:
+    ground_truth_path = agent_dir / "ground_truth.json"
+    if not ground_truth_path.exists():
+        return None
+    try:
+        with ground_truth_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    num_days = scenario.num_days
+    num_slots = len(agent.base_demand)
+    for key in ("best_usage_by_day", "recommended_usage"):
+        if key not in payload:
+            continue
+        try:
+            return _coerce_usage_matrix(
+                payload[key],
+                num_days=num_days,
+                num_slots=num_slots,
+                agent=agent,
+            )
+        except ValueError:
+            continue
+    return None
 
 
 def _transpose_agent_schedules(
@@ -190,7 +321,8 @@ def _build_agent_prompt(
         "Nudge message:\n"
         f"{nudge_message}\n\n"
         "Respond with the full Python script you will follow going forward. "
-        "The script must write a JSON list of seven integers to local_policy_output.json and perform no other changes to I/O. "
+        "The script must write a JSON list of seven usage vectors (one per day, each listing all slot loads between 0 and 1) "
+        "to local_policy_output.json and perform no other changes to I/O. "
         "Return only Python source code with no fences or narration."
     )
 
@@ -210,7 +342,15 @@ def _validate_nudged_policy(code: str, workspace: Path) -> str:
     return validator(code, script_name="_nudged_policy.py", max_attempts=2)
 
 
-def _run_agent_policy(code: str, workspace: Path, *, agent_id: int, num_days: int) -> Tuple[Optional[List[int]], Dict[str, object]]:
+def _run_agent_policy(
+    code: str,
+    workspace: Path,
+    *,
+    agent_id: int,
+    num_days: int,
+    num_slots: int,
+    agent: AgentConfig,
+) -> Tuple[Optional[List[List[float]]], Dict[str, object]]:
     script_path = workspace / "_nudged_policy.py"
     script_path.write_text(code, encoding="utf-8")
 
@@ -231,11 +371,16 @@ def _run_agent_policy(code: str, workspace: Path, *, agent_id: int, num_days: in
             return None, {"status": "invalid_json", "error": str(exc)}
 
     try:
-        schedule = _coerce_schedule(payload, num_days=num_days)
+        usage_matrix = _coerce_usage_matrix(
+            payload,
+            num_days=num_days,
+            num_slots=num_slots,
+            agent=agent,
+        )
     except ValueError as exc:
-        return None, {"status": "invalid_schedule", "error": str(exc)}
+        return None, {"status": "invalid_usage", "error": str(exc)}
 
-    return schedule, {
+    return usage_matrix, {
         "status": "ok",
         "script_path": str(script_path),
         "output_path": str(output_path),
@@ -267,6 +412,14 @@ def evaluate_local_agent_policy_script(
     if not output_path.exists():
         return 0.0, {"status": "missing_output"}
 
+    num_slots = len(scenario.slots)
+    agent_config = _get_agent_config(scenario, agent_id)
+    if agent_config is None:
+        return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
+    agent_config = _get_agent_config(scenario, agent_id)
+    if agent_config is None:
+        return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
+
     with output_path.open("r", encoding="utf-8") as handle:
         try:
             payload = json.load(handle)
@@ -274,23 +427,45 @@ def evaluate_local_agent_policy_script(
             return 0.0, {"status": "invalid_json", "error": str(exc)}
 
     try:
-        schedule = _coerce_schedule(payload, num_days=scenario.num_days)
+        usage_matrix = _coerce_usage_matrix(
+            payload,
+            num_days=scenario.num_days,
+            num_slots=num_slots,
+            agent=agent_config,
+        )
     except ValueError as exc:
-        return 0.0, {"status": "invalid_schedule", "error": str(exc)}
+        return 0.0, {"status": "invalid_usage", "error": str(exc)}
 
     local_optima = enumerate_local_optima(scenario)
     best_slots = local_optima.get(agent_id)
     if best_slots is None:
         return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
 
-    matches = [slot in best_slots[day_idx] for day_idx, slot in enumerate(schedule)]
-    score = sum(matches) / scenario.num_days if scenario.num_days else 0.0
+    truth_matrix = _load_ground_truth_usage_matrix(
+        scenario_dir,
+        scenario=scenario,
+        agent=agent_config,
+    )
+    if truth_matrix is not None:
+        target_rows_by_day = [[[float(value) for value in row]] for row in truth_matrix]
+    else:
+        target_rows_by_day = [
+            _candidate_rows_from_slots(agent_config, slots) for slots in best_slots
+        ]
+
+    score, per_day_error = _score_usage_matrix(usage_matrix, target_rows_by_day)
     detail = {
-        "status": "ok" if score >= 1.0 else "partial",
+        "status": "ok" if score >= 0.99 else "partial",
         "agent_id": agent_id,
-        "schedule": schedule,
-        "best": best_slots,
-        "matches": matches,
+        "usage": usage_matrix,
+        "best_slot_options": best_slots,
+        "target_usage": truth_matrix
+        if truth_matrix is not None
+        else [
+            rows[0] if rows else [0.0 for _ in range(num_slots)]
+            for rows in target_rows_by_day
+        ],
+        "per_day_error": per_day_error,
     }
     return score, detail
 
@@ -319,6 +494,12 @@ def evaluate_global_agent_policy_script(
     if not output_path.exists():
         return 0.0, {"status": "missing_output"}
 
+    num_slots = len(scenario.slots)
+
+    agent_config = _get_agent_config(scenario, agent_id)
+    if agent_config is None:
+        return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
+
     with output_path.open("r", encoding="utf-8") as handle:
         try:
             payload = json.load(handle)
@@ -326,23 +507,45 @@ def evaluate_global_agent_policy_script(
             return 0.0, {"status": "invalid_json", "error": str(exc)}
 
     try:
-        schedule = _coerce_schedule(payload, num_days=scenario.num_days)
+        usage_matrix = _coerce_usage_matrix(
+            payload,
+            num_days=scenario.num_days,
+            num_slots=num_slots,
+            agent=agent_config,
+        )
     except ValueError as exc:
-        return 0.0, {"status": "invalid_schedule", "error": str(exc)}
+        return 0.0, {"status": "invalid_usage", "error": str(exc)}
 
     best_allocation, best_score = enumerate_global_optimum(scenario)
     if agent_id < 1 or agent_id > len(scenario.agents):
         return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
 
     target_schedule = [int(day[agent_id - 1]) for day in best_allocation]
-    matches = [slot == target for slot, target in zip(schedule, target_schedule)]
-    score = sum(matches) / scenario.num_days if scenario.num_days else 0.0
+    truth_matrix = _load_ground_truth_usage_matrix(
+        scenario_dir,
+        scenario=scenario,
+        agent=agent_config,
+    )
+    if truth_matrix is not None:
+        target_rows_by_day = [[[float(value) for value in row]] for row in truth_matrix]
+    else:
+        target_rows_by_day = [
+            _candidate_rows_from_slots(agent_config, [target_slot])
+            for target_slot in target_schedule
+        ]
+    score, per_day_error = _score_usage_matrix(usage_matrix, target_rows_by_day)
     detail = {
-        "status": "ok" if score >= 1.0 else "partial",
+        "status": "ok" if score >= 0.99 else "partial",
         "agent_id": agent_id,
-        "schedule": schedule,
-        "target": target_schedule,
-        "matches": matches,
+        "usage": usage_matrix,
+        "target_slots": target_schedule,
+        "target_usage": truth_matrix
+        if truth_matrix is not None
+        else [
+            rows[0] if rows else [0.0 for _ in range(num_slots)]
+            for rows in target_rows_by_day
+        ],
+        "per_day_error": per_day_error,
         "objective": best_score,
     }
     return score, detail
@@ -361,23 +564,46 @@ def evaluate_agent_nudge_response(
     except json.JSONDecodeError as exc:
         return 0.0, {"status": "invalid_json", "error": str(exc)}
 
-    required_keys = {"persona", "recommended_slots", "message"}
+    required_keys = {"persona", "recommended_usage", "message"}
     if not required_keys.issubset(payload):
         return 0.0, {"status": "missing_keys", "payload": payload}
 
+    agent_config = _get_agent_config(scenario, agent_id)
+    if agent_config is None:
+        return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
+
+    num_slots = len(scenario.slots)
+
     try:
-        recommended_slots = _coerce_schedule(payload["recommended_slots"], num_days=scenario.num_days)
+        recommended_usage = _coerce_usage_matrix(
+            payload["recommended_usage"],
+            num_days=scenario.num_days,
+            num_slots=num_slots,
+            agent=agent_config,
+        )
     except (TypeError, ValueError, KeyError) as exc:
-        return 0.0, {"status": "bad_slots", "error": str(exc)}
+        return 0.0, {"status": "bad_usage", "error": str(exc)}
 
     persona = str(payload["persona"])
     text = str(payload["message"])
 
-    if agent_id < 1 or agent_id > len(scenario.agents):
-        return 0.0, {"status": "unknown_agent", "agent_id": agent_id}
-
     best_allocation, best_objective = enumerate_global_optimum(scenario)
     target_slots = [int(day[agent_id - 1]) for day in best_allocation]
+
+    truth_matrix = None
+    scenario_dir = _locate_scenario_dir(scenario.scenario_id)
+    if scenario_dir is not None:
+        truth_matrix = _load_ground_truth_usage_matrix(
+            scenario_dir / "global" / f"agent_{agent_id}",
+            scenario=scenario,
+            agent=agent_config,
+        )
+    if truth_matrix is not None:
+        target_rows = [[[float(value) for value in row]] for row in truth_matrix]
+    else:
+        target_rows = [
+            _candidate_rows_from_slots(agent_config, [slot]) for slot in target_slots
+        ]
 
     local_policy = _load_agent_local_policy_snippet(agent_id, scenario.scenario_id)
     prompt = _build_agent_prompt(
@@ -407,41 +633,50 @@ def evaluate_agent_nudge_response(
                 "error": str(exc),
                 "agent_id": agent_id,
                 "persona": persona,
-                "recommended_slots": recommended_slots,
+                "recommended_usage": recommended_usage,
                 "message": text,
             }
-        schedule, run_detail = _run_agent_policy(
+        nudged_usage, run_detail = _run_agent_policy(
             validated_policy,
             workspace,
             agent_id=agent_id,
             num_days=scenario.num_days,
+            num_slots=num_slots,
+            agent=agent_config,
         )
     finally:
         if cleanup_needed:
             shutil.rmtree(workspace, ignore_errors=True)
 
-    if schedule is None:
+    if nudged_usage is None:
         run_detail.update(
             {
                 "agent_id": agent_id,
                 "persona": persona,
-                "recommended_slots": recommended_slots,
+                "recommended_usage": recommended_usage,
                 "message": text,
             }
         )
         return 0.0, run_detail
 
-    matches = [slot == target for slot, target in zip(schedule, target_slots)]
-    score = sum(matches) / scenario.num_days if scenario.num_days else 0.0
+    score, per_day_error = _score_usage_matrix(nudged_usage, target_rows)
+    if truth_matrix is not None:
+        target_usage = truth_matrix
+    else:
+        target_usage = [
+            rows[0] if rows else [0.0 for _ in range(num_slots)] for rows in target_rows
+        ]
+
     detail = {
-        "status": "ok" if score >= 1.0 else "partial",
+        "status": "ok" if score >= 0.99 else "partial",
         "agent_id": agent_id,
         "persona": persona,
-        "recommended_slots": recommended_slots,
+        "recommended_usage": recommended_usage,
         "message": text,
-        "nudged_schedule": schedule,
+        "nudged_usage": nudged_usage,
         "target_slots": target_slots,
-        "matches": matches,
+        "target_usage": target_usage,
+        "per_day_error": per_day_error,
         "objective": best_objective,
     }
     return score, detail

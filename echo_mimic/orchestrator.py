@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from echo_mimic.domains.energy import EnergyDomain, EnergyDomainConfig
+from echo_mimic.domains.energy_ev import EnergyDomain, EnergyDomainConfig
 from echo_mimic.domains.farm import FarmDomain, FarmDomainConfig
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,6 @@ class RunConfig:
     population_size: int = 25
     num_generations: int = 25
     inner_loop_size: int = 10
-    farm_ids: Optional[list[int]] = None
     use_template: bool = False
     use_hint: bool = True
     halstead_metrics: bool = False
@@ -44,7 +43,6 @@ class Orchestrator:
                     population_size=self.config.population_size,
                     num_generations=self.config.num_generations,
                     inner_loop_size=self.config.inner_loop_size,
-                    farm_ids=self.config.farm_ids,
                     use_template=self.config.use_template,
                     use_hint=self.config.use_hint,
                     halstead_metrics=self.config.halstead_metrics,
@@ -52,7 +50,7 @@ class Orchestrator:
                 )
             )
             farm.run()
-        elif domain == "energy":
+        elif domain in {"energy", "energy_ev"}:
             energy = EnergyDomain(
                 EnergyDomainConfig(
                     mode=self.config.mode,

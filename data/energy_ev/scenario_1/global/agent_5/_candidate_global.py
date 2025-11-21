@@ -1,218 +1,353 @@
 import json
 import os
+from itertools import product
 
-class AgentPolicyCoordinator:
-    """
-    Policy for Agent 5 (Position 5 graduate tenant commuting late) coordinating
-    over 7 days to minimize weighted cost (Carbon/Price) while respecting
-    coordination goals derived from neighbor preferences and grid capacity.
-    """
-    def __init__(self, agent_id=5):
-        self.agent_id = agent_id
-        self.location = 5
-        self.base_demand = [0.50, 0.70, 0.60, 0.90]
-        self.num_slots = 4
-        self.num_days = 7
-        
-        # Load global parameters (will be overwritten by scenario file values)
-        self.alpha = 40.00  # Weight for Price/Cost factors
-        self.beta = 0.50    # Weight for Comfort/Local penalty
-        self.gamma = 12.00  # Weight for Congestion/Grid stress factor
-        
-        self.scenario = None
-        self.daily_data = {}
-        self.neighbors = {}
-        self.capacity = 6.8
+# --- Configuration ---
+SLOT_COUNT = 4
+DAY_COUNT = 7
+CAPACITY = 6.8
 
-    def load_scenario(self, filename='scenario.json'):
-        """Loads scenario data, relying on 'scenario.json' being present."""
-        try:
-            with open(filename, 'r') as f:
-                self.scenario = json.load(f)
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Required file '{filename}' not found in the execution directory.")
+# --- Agent 5 Specifics ---
+AGENT_ID = 5
+BASE_DEMAND = [0.50, 0.70, 0.60, 0.90]
+# Position 5 tenant commuting late, likely wants to charge later if possible, but comfort is key.
+# Given the high base demand in slot 3 (0.90), leaning slightly away from the latest slot if costs are high.
+# Preferences derived from persona: Moderate comfort sensitivity, higher demand flexibility than retirees, less budget-driven than engineer.
+# Let's prioritize slots 2 and 3 (later times) slightly, but heavily weight carbon/price.
 
-        # Extract global parameters and constraints
-        self.alpha = self.scenario.get('alpha', self.alpha)
-        self.beta = self.scenario.get('beta', self.beta)
-        self.gamma = self.scenario.get('gamma', self.gamma)
-        self.capacity = self.scenario.get('capacity', 6.8)
-        
-        # Parse neighbor data based on the format observed in the prompt examples
-        self.neighbors = self._parse_neighbor_examples(self.scenario.get('neighbor_examples', []))
-        
-        # Parse daily data structure
-        self._parse_daily_data(self.scenario['days'])
+# --- Utility Functions ---
 
-    def _parse_neighbor_examples(self, neighbor_data: list) -> dict:
-        parsed = {}
-        for neighbor in neighbor_data:
-            # Handle the structure where neighbor data might be nested or slightly inconsistent
-            if 'Neighbor 4' in neighbor:
-                agent_idx = 4
-                data = neighbor['Neighbor 4'][0]
-            elif 'Neighbor 1' in neighbor:
-                agent_idx = 1
-                data = neighbor['Neighbor 1'][0]
-            else:
-                continue
-
-            parsed[agent_idx] = {
-                'base_demand': data['Base demand'],
-                'preferred_slots': set(data['Preferred slots']),
-                'comfort_penalty': data['Comfort penalty'],
-                'ground_truth_min_cost': data['Ground truth min-cost slots by day']
-            }
-        return parsed
-
-    def _parse_daily_data(self, days_info: dict):
-        """Parses the string-based daily data into usable lists of floats."""
-        
-        day_keys = sorted([k for k in days_info.keys() if k.startswith('Day')])
-        
-        for day_key in day_keys:
-            day_info = days_info[day_key]
-            
-            def parse_list_str(s: str) -> list[float]:
-                # Handles various delimiters found in the input format (', ' or just ',')
-                return [float(x.strip()) for x in s.replace(';', '').split(',')]
-
-            spatial_carbon_map = {}
-            raw_sc = day_info['Spatial carbon']
-            
-            # Spatial carbon parsing for location 5
-            for part in raw_sc.split(';'):
-                try:
-                    loc_id_str, carbon_str = part.split(': ')
-                    loc_id = int(loc_id_str.strip())
-                    spatial_carbon_map[loc_id] = parse_list_str(carbon_str)
-                except ValueError:
-                    # Handle case where key/value split fails (e.g., end of string)
-                    continue
-
-            self.daily_data[day_key] = {
-                'tariff': parse_list_str(day_info['Tariff']),
-                'carbon': parse_list_str(day_info['Carbon']),
-                'baseline': parse_list_str(day_info['Baseline load']),
-                'spatial_carbon': spatial_carbon_map.get(self.location, parse_list_str(day_info['Carbon'])) # Fallback to global carbon
-            }
-
-    def _calculate_slot_score(self, day_key: str, slot_index: int, session_count: int = 1) -> float:
-        """
-        Calculates the composite score (Cost to Minimize) for a single slot.
-        Score = C1 * Carbon + C2 * Price + C3 * Congestion + C4 * Comfort_Penalty + C5 * Coordination_Penalty
-        """
-        data = self.daily_data[day_key]
-        
-        # --- 1. Cost Term (Carbon/Price - Global/Local Budget) ---
-        
-        # Prioritize Carbon (using location-specific value for Agent 5)
-        carbon_intensity = data['spatial_carbon'][slot_index] 
-        carbon_cost = self.alpha * carbon_intensity # Alpha (40.0) weighs this heavily
-        
-        # Price (Secondary cost)
-        price = data['tariff'][slot_index]
-        price_cost = self.alpha * 0.1 * price 
-        
-        # --- 2. Congestion Term (Grid Stress - Global Goal) ---
-        
-        baseline = data['baseline'][slot_index]
-        demand = self.base_demand[slot_index] * session_count
-        
-        # Congestion Penalty (gamma=12.0): Penalize capacity usage relative to baseline expectation.
-        # Agent 5 is a large consumer (demand 0.90 max). We use the ratio of demand/baseline as stress indicator.
-        
-        # If baseline is zero or very low, avoid division by zero; rely on absolute demand vs capacity if necessary.
-        if baseline > 0:
-            load_ratio = (baseline + demand) / self.capacity
-        else:
-            load_ratio = demand / self.capacity # Rely purely on absolute load if baseline is missing
-
-        # Penalize high load ratio heavily when above 1.0 (Capacity violation)
-        congestion_penalty = self.gamma * max(0, load_ratio - 1.0) * 5.0 # Scale violation heavily
-        congestion_penalty += self.gamma * 0.1 * load_ratio # Mild penalty otherwise
-
-        # --- 3. Comfort/Preference Term (Local Soft Constraint) ---
-        
-        # Agent 5 Profile: Late commuter, high demand in slot 3 (0.90). We prefer slot 3 and disfavor slot 2 (0.60 base demand).
-        comfort_penalty = 0.0
-        if slot_index == 3:
-            comfort_penalty = -0.1 * self.beta # Mild reward for preferred late slot
-        elif slot_index == 2:
-            comfort_penalty = 0.5 * self.beta # Mild penalty for the lowest base demand slot
-            
-        # --- 4. Coordination Term (Neighbor Load Spreading) ---
-        
-        coordination_penalty = 0.0
-        
-        # Neighbor 4 (Loc 4) prefers {0, 3}. Neighbor 1 (Loc 1) prefers {0, 2}.
-        # Avoid slots where coordination clash is high (i.e., slots preferred by both or highly preferred by critical neighbors).
-        
-        is_preferred_by_N4 = slot_index in self.neighbors.get(4, {}).get('preferred_slots', set())
-        is_preferred_by_N1 = slot_index in self.neighbors.get(1, {}).get('preferred_slots', set())
-
-        # If slot 3 is chosen, it strongly clashes with N4's comfort. We only choose it if Carbon/Price are very good.
-        if slot_index == 3 and is_preferred_by_N4:
-            coordination_penalty += 0.5 * self.beta
-        
-        # If slot 0 is chosen, it clashes with both N1 and N4's preference for early slots.
-        elif slot_index == 0 and is_preferred_by_N4 and is_preferred_by_N1:
-            coordination_penalty += 0.3 * self.beta
-
-        total_score = carbon_cost + price_cost + congestion_penalty + comfort_penalty + coordination_penalty
-        
-        return total_score
-
-    def generate_recommendation(self) -> list[int]:
-        """Generates a 7-day slot recommendation list."""
-        
-        day_keys = sorted([k for k in self.scenario['days'].keys() if k.startswith('Day')])
-        recommendations = []
-        
-        for day_key in day_keys[:self.num_days]:
-            
-            min_score = float('inf')
-            best_slot = -1
-            
-            for j in range(self.num_slots):
-                # Assume 1 session charge if the slot is selected for the day
-                score = self._calculate_slot_score(day_key, j, session_count=1)
-                
-                if score < min_score:
-                    min_score = score
-                    best_slot = j
-                elif score == min_score:
-                    # Tie-breaker: Prefer later slots (higher index) if cost is identical, 
-                    # reflecting the late commuter profile, provided it doesn't violently contradict coordination.
-                    if j > best_slot:
-                        best_slot = j
-            
-            recommendations.append(best_slot)
-            
-        return recommendations
-
-    def save_output(self, recommendations: list[int]):
-        """Writes the final recommendations to global_policy_output.json."""
-        
-        # Output format required is a list of seven slot indices
-        with open('global_policy_output.json', 'w') as f:
-            json.dump(recommendations, f, indent=4)
-
-def policy_main():
-    """Main entry point to execute the policy."""
-    policy = AgentPolicyCoordinator(agent_id=5)
+def load_scenario_data(base_path="./"):
+    """Loads scenario data from JSON files relative to the execution directory."""
     try:
-        policy.load_scenario()
-        recommendations = policy.generate_recommendation()
-        policy.save_output(recommendations)
+        # Assuming scenario.json contains all fixed/common data
+        with open(os.path.join(base_path, "scenario.json"), 'r') as f:
+            scenario = json.load(f)
+        
+        # Reconstruct the full 7-day structure based on the scenario file content if needed,
+        # but for simplicity in this context, we often rely on the structure provided in the prompt.
+        # Since the prompt gives a structured view, we parse it directly into a usable structure.
+        
+        # Extract fixed data
+        fixed_data = {
+            "slots": scenario["slots"],
+            "price": scenario["price"],
+            "carbon_intensity": scenario["carbon_intensity"],
+            "capacity": scenario["capacity"],
+            "baseline_load": scenario["baseline_load"],
+            "slot_min_sessions": scenario["slot_min_sessions"],
+            "slot_max_sessions": scenario["slot_max_sessions"],
+            "spatial_carbon_template": scenario["spatial_carbon"], # This needs parsing per day
+            "alpha": scenario["alpha"],
+            "beta": scenario["beta"],
+            "gamma": scenario["gamma"],
+        }
+
+        # Parse daily data
+        daily_data = {}
+        day_names = list(scenario["days"].keys())
+        for day_name in day_names:
+            day_info = scenario["days"][day_name]
+            
+            # Parse spatial carbon strings into lists of floats/ints
+            spatial_carbon_map = {}
+            for loc_key, sc_string in day_info["Spatial carbon"].items():
+                try:
+                    # Spatial carbon is formatted like "1: 330, 520, 560, 610"
+                    loc_id = int(loc_key.split(':')[0].strip())
+                    sc_values = [float(x) for x in sc_string.split('; ')[0].split(', ')]
+                    spatial_carbon_map[loc_id] = sc_values
+                except Exception:
+                    # Handle cases where the prompt format might be slightly different in the JSON structure
+                    # Fallback to assuming the provided string is space/comma separated values for the 4 slots
+                    try:
+                        sc_values = [float(x) for x in sc_string.replace(';', '').split(', ')]
+                        spatial_carbon_map[loc_id] = sc_values
+                    except:
+                         # If direct parsing fails, use global for this location if available
+                        spatial_carbon_map[loc_id] = scenario["spatial_carbon"][str(loc_id)]
+
+
+            daily_data[day_name] = {
+                "Tariff": [float(t) for t in day_info["Tariff"].split(', ')],
+                "Carbon": [float(c) for c in day_info["Carbon"].split(', ')],
+                "Baseline load": [float(b) for b in day_info["Baseline load"].split(', ')],
+                "Spatial carbon": spatial_carbon_map,
+            }
+
+        return fixed_data, daily_data, day_names
+
+    except FileNotFoundError:
+        print(f"Error: scenario.json not found in {os.getcwd()}. Ensure the file structure is correct.")
+        # Return dummy structure if loading fails to allow script execution for testing structure
+        return None, None, None
     except Exception as e:
-        # Handle critical failure gracefully by outputting a safe default,
-        # although in a controlled environment, this block might be omitted.
-        # print(f"Policy execution failed: {e}")
+        print(f"An error occurred during data loading: {e}")
+        return None, None, None
+
+def calculate_agent_load(slot_index, demand_profile):
+    """Calculates the total energy demand for the agent in a specific slot."""
+    # Since we are making a single decision (session count 1 or 0), 
+    # we use base demand directly, assuming 1 session if chosen.
+    return demand_profile[slot_index]
+
+def calculate_neighbor_load_projection(day_data, day_name, neighbor_examples, current_slot_index):
+    """
+    Projects neighbor load for the current slot based on their ground truth (GT)
+    historical choices, adjusted for the current day's context if possible.
+    
+    Since we are in Stage 3 (Collective), we must use neighbor examples to infer
+    their likely behavior for *this* specific day, even though the examples
+    only provide GT for past days.
+    """
+    
+    neighbor_loads = {loc: 0.0 for loc in [1, 2, 3, 4]} # We coordinate with 1 and 4
+    
+    # Mapping neighbor ID to its data structure in the scenario
+    N_MAP = {
+        4: {"Base demand": [0.90, 0.60, 0.70, 0.80], "Comfort penalty": 0.16, "Preferred slots": [0, 3]},
+        1: {"Base demand": [1.20, 0.70, 0.80, 0.60], "Comfort penalty": 0.18, "Preferred slots": [0, 2]}
+    }
+    
+    # The GT provides the *actual* chosen slot for the past 7 days.
+    # We assume the agent will follow its historical minimum-cost strategy unless
+    # current conditions strongly deviate, which is hard to model perfectly here.
+    # Simplification: Assume neighbors stick closely to their historical "min-cost" slot for this day of the week.
+    
+    # Get the GT slot for the current day (Day N, where N=1..7)
+    day_index = int(day_name.split(' ')[1].strip(' (')) - 1 # 0 to 6
+
+    for n_id, n_data in neighbor_examples.items():
+        if str(n_id) not in n_data: continue
+        
+        # Extract GT slot for this day
+        gt_slots = n_data[str(n_id)]["ground_truth_min_cost_slots"]
+        
+        if day_index < len(gt_slots):
+            # Assume the neighbor chooses the historically best slot for this day index
+            chosen_slot = gt_slots[day_index]
+            
+            # Get neighbor's base demand for that chosen slot
+            neighbor_demand = N_MAP[n_id]["Base demand"][chosen_slot]
+            neighbor_loads[n_id] = neighbor_demand
+            
+    # Sum the projected load from neighbors coordinating with us
+    total_neighbor_load = sum(neighbor_loads.values())
+    
+    return total_neighbor_load
+
+# --- Heuristic Policy Definition ---
+
+def heuristic_score(slot_index, day_data, fixed_data, agent_demand, total_neighbor_load, day_name):
+    """
+    Calculates a composite score for a slot, prioritizing:
+    1. Carbon intensity (lowest is best).
+    2. Congestion (Total Load vs Capacity).
+    3. Price (lowest is best, weighted lower than Carbon/Congestion).
+    
+    Weights based on global tuning parameters (alpha, beta, gamma):
+    Cost = alpha * Carbon + beta * Congestion + gamma * Price
+    """
+    
+    # 1. Carbon Intensity (Global Goal)
+    carbon = day_data["Carbon"][slot_index]
+    
+    # 2. Congestion (Grid Health / Spatial awareness)
+    # Total Load = Agent Load + Neighbor Load + Baseline Load
+    # Spatial Carbon reflects local grid stress due to demand distribution. We use it as a congestion proxy.
+    
+    # Spatial carbon for Agent 5 (Location 5) on this day
+    try:
+        spatial_c5 = day_data["Spatial carbon"][AGENT_ID][slot_index]
+    except KeyError:
+        # Fallback to global carbon if location-specific data isn't parsed correctly
+        spatial_c5 = day_data["Carbon"][slot_index]
+
+    # Total load projection (highly simplified for coordination stage 3)
+    baseline = day_data["Baseline load"][slot_index]
+    # We approximate the total system load we are contributing to:
+    # Current Agent Load + Projected Neighbor Load + Baseline Load + Current Agent Load (since agent load contributes to congestion)
+    projected_load = agent_demand + total_neighbor_load + baseline
+    
+    # Normalize congestion: We want load below capacity, penalized heavily if above.
+    # Beta term emphasizes avoiding exceeding capacity.
+    if projected_load > CAPACITY:
+        congestion_penalty = beta * (projected_load - CAPACITY) * 10.0 # High penalty for exceeding capacity
+    else:
+        # Mild penalty for simply being high, relative to baseline
+        congestion_penalty = beta * (projected_load / CAPACITY)
+        
+    # 3. Price (Local Cost)
+    price = day_data["Tariff"][slot_index]
+    
+    # 4. Comfort/Personal Preference (Implicit: Agent 5 favors later slots 2, 3, but this is weakly enforced)
+    # Since we don't have a comfort score defined for Agent 5 in the prompt examples, we rely on environmentals.
+    # We will apply a slight bias against slot 0 if conditions are otherwise good.
+    comfort_adjustment = 0.0
+    if slot_index == 0:
+        comfort_adjustment = 5.0 # Small penalty for the earliest slot
+        
+    # --- Final Score Calculation (Minimize Score) ---
+    # Components must be scaled appropriately based on typical ranges.
+    # Carbon range: ~450 to 750
+    # Price range: ~0.20 to 0.32
+    # Congestion term (projection): Range ~5 to 15 (normalized) + penalty
+    
+    # Scaling factors based on alpha=40, beta=0.5, gamma=12:
+    
+    score = (
+        alpha * carbon +                # Heavy weight on carbon (40x)
+        beta * projected_load * 100 +   # Weighting load relative to magnitude (0.5x * Load * 100 -> Load scale 500-1500)
+        gamma * price * 100 +           # Weighting price (12x * Price * 100 -> Price scale 2000-3200)
+        comfort_adjustment              # Small comfort adjustment
+    )
+    
+    # Add spatial carbon as a secondary congestion/local grid health metric
+    score += 2.0 * spatial_c5 
+    
+    return score
+
+def determine_recommendation(fixed_data, daily_data, day_names, neighbor_examples):
+    """Determines the best slot for each of the 7 days."""
+    
+    recommendations = {}
+    
+    # Pre-calculate Agent 5's load for each slot (assuming session=1)
+    agent_loads = [calculate_agent_load(i, BASE_DEMAND) for i in range(SLOT_COUNT)]
+
+    # Iterate through each day
+    for day_index, day_name in enumerate(day_names):
+        day_data = daily_data[day_name]
+        
+        best_score = float('inf')
+        best_slot = -1
+        
+        # --- Coordination Step: Estimate Neighbor Load ---
+        # Since coordination is only *with* neighbors based on observed examples, 
+        # we project what they *likely* did on this day based on their GT history.
+        
+        # Neighbor examples need to be mapped to the scenario structure
+        processed_neighbors = {}
+        for n_ex in neighbor_examples:
+            # Assuming neighbor_examples is a list of dicts, extract relevant info
+            
+            # Neighbor 4
+            if 'Neighbor 4' in n_ex:
+                processed_neighbors[4] = {
+                    "Base demand": n_ex['Neighbor 4'][0]['Base demand'], 
+                    "Comfort penalty": n_ex['Neighbor 4'][0]['Comfort penalty'],
+                    "Preferred slots": n_ex['Neighbor 4'][0]['Preferred slots'],
+                    "ground_truth_min_cost_slots": n_ex['Neighbor 4'][0]['ground_truth min-cost slots by day']
+                }
+            # Neighbor 1
+            elif 'Neighbor 1' in n_ex:
+                processed_neighbors[1] = {
+                    "Base demand": n_ex['Neighbor 1'][0]['Base demand'], 
+                    "Comfort penalty": n_ex['Neighbor 1'][0]['Comfort penalty'],
+                    "Preferred slots": n_ex['Neighbor 1'][0]['Preferred slots'],
+                    "ground_truth_min_cost_slots": n_ex['Neighbor 1'][0]['ground_truth min-cost slots by day']
+                }
+
+        # This projection is crucial for coordination. We use the GT slots provided for the corresponding day index.
+        total_neighbor_load = calculate_neighbor_load_projection(
+            day_data, day_name, processed_neighbors, -1
+        )
+        
+        # --- Slot Evaluation ---
+        for slot in range(SLOT_COUNT):
+            agent_load = agent_loads[slot]
+            
+            # Score calculation based on current day's data and projected congestion
+            score = heuristic_score(
+                slot, 
+                day_data, 
+                fixed_data, 
+                agent_load, 
+                total_neighbor_load,
+                day_name
+            )
+            
+            # Optional: Apply slight preference adjustment for Agent 5 (prefers later slots 2, 3)
+            # If scores are very close, this nudges towards the persona.
+            if score < best_score:
+                best_score = score
+                best_slot = slot
+            elif score == best_score:
+                # Tie-breaker: If costs are equal, prefer later slots (2, 3) over earlier ones (0, 1)
+                if slot > best_slot and best_slot < 2:
+                    best_slot = slot
+        
+        recommendations[day_name] = best_slot
+
+    return recommendations
+
+# --- Main Execution ---
+if __name__ == "__main__":
+    # 1. Load scenario data
+    # NOTE: In a real execution environment, scenario.json is in the same directory.
+    fixed, daily, day_names = load_scenario_data()
+
+    # For local testing/structure validation, we must inject the neighbor data directly
+    # as it is not guaranteed to be in scenario.json structure.
+    neighbor_examples_data = [
+        {
+            "Neighbor 4": [
+                {
+                    "Base demand": [0.90, 0.60, 0.70, 0.80], 
+                    "Comfort penalty": 0.16, 
+                    "Preferred slots": [0, 3], 
+                    "ground_truth min-cost slots by day": [3, 3, 3, 2, 3, 3, 3]
+                ]
+            ]
+        },
+        {
+            "Neighbor 1": [
+                {
+                    "Base demand": [1.20, 0.70, 0.80, 0.60], 
+                    "Comfort penalty": 0.18, 
+                    "Preferred slots": [0, 2], 
+                    "ground_truth min-cost slots by day": [0, 1, 2, 0, 1, 2, 0]
+                ]
+            ]
+        }
+    ]
+    
+    # Reorder day names to match the simulation structure (Day 1 to Day 7)
+    # The loaded day_names should already be in order based on the prompt structure.
+    
+    # 2. Determine recommendation
+    if fixed and daily and day_names:
+        slot_recommendations = determine_recommendation(
+            fixed, 
+            daily, 
+            day_names, 
+            neighbor_examples_data
+        )
+
+        # 3. Format output
+        # Ensure output is strictly ordered by Day 1, Day 2, ..., Day 7
+        final_output_list = []
+        for day_name in day_names:
+            if day_name in slot_recommendations:
+                final_output_list.append(slot_recommendations[day_name])
+            else:
+                # Fallback: if a day is missing, default to slot 0 or the last computed slot
+                final_output_list.append(0) 
+
+        # 4. Write global_policy_output.json
+        output_filename = "global_policy_output.json"
+        with open(output_filename, 'w') as f:
+            json.dump(final_output_list, f, indent=4)
+
+        # print(f"Policy decisions saved to {output_filename}: {final_output_list}")
+        
+    else:
+        # Critical failure in data loading, create a safe default output
+        print("Data loading failed. Outputting default policy: [3, 3, 3, 3, 3, 3, 3]")
         default_output = [3] * 7
-        with open('global_policy_output.json', 'w') as f:
+        with open("global_policy_output.json", 'w') as f:
             json.dump(default_output, f, indent=4)
-
-
-if __name__ == '__main__':
-    policy_main()
+        # The policy script should only contain the code required to run, so we ensure the final output is just the script.
+        pass # In the final output, this block is omitted.
+        
+# The script ends here, providing only the code above.

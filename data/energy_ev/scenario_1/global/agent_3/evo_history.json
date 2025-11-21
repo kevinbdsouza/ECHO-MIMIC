@@ -2,7 +2,7 @@
   {
     "best_detail": {
       "status": "error",
-      "stderr": "Traceback (most recent call last):\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 266, in <module>\n    main()\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 254, in main\n    policy = DERPolicy(scenario_data, AGENT_ID)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 13, in __init__\n    self.base_demand = np.array(self.scenario['base_demand'])\n                                ~~~~~~~~~~~~~^^^^^^^^^^^^^^^\nKeyError: 'base_demand'\n"
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 390, in <module>\n    main()\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 365, in main\n    day_data = [v for k, v in scenario_data['days'].items() if k.startswith(day_key)][0]\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'list' object has no attribute 'items'\n"
     },
     "best_score": 0.0,
     "counts": {
@@ -23,7 +23,7 @@
     },
     "generation": 0,
     "mean_score": 0.0,
-    "population_size": 5,
+    "population_size": 2,
     "score": 0.0,
     "trajectory": [
       "init(0.0000)"
@@ -32,7 +32,7 @@
   {
     "best_detail": {
       "status": "error",
-      "stderr": "Traceback (most recent call last):\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 266, in <module>\n    main()\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 254, in main\n    policy = DERPolicy(scenario_data, AGENT_ID)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 13, in __init__\n    self.base_demand = np.array(self.scenario['base_demand'])\n                                ~~~~~~~~~~~~~^^^^^^^^^^^^^^^\nKeyError: 'base_demand'\n"
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 390, in <module>\n    main()\n  File \"/Users/kevindsouza/Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 365, in main\n    day_data = [v for k, v in scenario_data['days'].items() if k.startswith(day_key)][0]\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'list' object has no attribute 'items'\n"
     },
     "best_score": 0.0,
     "counts": {
@@ -53,7 +53,7 @@
     },
     "generation": 1,
     "mean_score": 0.0,
-    "population_size": 5,
+    "population_size": 2,
     "score": 0.0,
     "trajectory": [
       "init(0.0000)"

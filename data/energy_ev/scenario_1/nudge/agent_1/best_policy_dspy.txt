@@ -1,0 +1,13 @@
+{
+"persona": "Position 1 battery engineer balancing budget and solar backfeed",
+"recommended_usage": [
+    [0.65, 0.15, 0.15, 0.10],
+    [0.15, 0.65, 0.10, 0.10],
+    [0.15, 0.15, 0.65, 0.10],
+    [0.65, 0.15, 0.15, 0.10],
+    [0.15, 0.65, 0.10, 0.10],
+    [0.15, 0.15, 0.65, 0.10],
+    [0.65, 0.15, 0.15, 0.10]
+],
+"message": "As an engineer focused on grid stability and solar utilization, the coordinated plan asks you to slightly shift your natural cost-minimizing bias (slots 0, 2) to better support neighbours using slots 1 and 3. While your local instinct favors low cost/carbon, aligning with Neighbour 2 (Slot 1 focus) and Neighbour 3 (Slot 1, 3 focus) helps manage local transformer thermal stress (Day 2/6 context). Adopting this balanced approach allows us to keep your overall session usage low in the expensive Slot 3 while ensuring essential evening coverage in Slot 1 is met system-wide, maximizing collective efficiency."
+}

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from textwrap import indent
-from typing import Dict, Sequence
+from typing import Dict, List, Sequence, Tuple
 
 from .scenario import (
     AgentConfig,
     DayProfile,
     EVScenario,
+    average_usage_for_slots,
     enumerate_global_optimum,
     enumerate_local_optima,
 )
@@ -293,10 +294,15 @@ def _format_neighbor_examples(
         )
         preferred_text = ", ".join(str(int(idx)) for idx in preferred) if preferred else "None"
         comfort_text = f"{float(comfort):.2f}" if comfort is not None else "unknown"
-        if ground_truth:
+        usage_rows = _usage_rows_from_ground_truth(neighbor, example, ground_truth)
+        if usage_rows:
             ground_truth_text = "; ".join(
-                f"Day {idx + 1}: {slots}"
-                for idx, slots in enumerate(ground_truth)
+                f"Day {idx + 1}: {_format_usage_row(row)}"
+                for idx, row in enumerate(usage_rows)
+            )
+        elif ground_truth:
+            ground_truth_text = "; ".join(
+                f"Day {idx + 1}: {slots}" for idx, slots in enumerate(ground_truth)
             )
         else:
             ground_truth_text = "Unavailable"
@@ -305,7 +311,7 @@ def _format_neighbor_examples(
             f"- {header}",
             f"  Base demand: {base_demand_text}",
             f"  Preferred slots: {preferred_text} | Comfort penalty: {comfort_text}",
-            f"  Ground truth min-cost slots by day: {ground_truth_text}",
+            f"  Ground truth usage by day: {ground_truth_text}",
         ]
         block = "\n".join(lines)
         if indent_level:
@@ -316,3 +322,58 @@ def _format_neighbor_examples(
         return (" " * indent_level) + "- No neighbour exemplars provided" if indent_level else "- No neighbour exemplars provided"
 
     return "\n".join(blocks)
+
+
+def _resolve_base_demand(
+    neighbor: AgentConfig | None, example: Dict[str, object]
+) -> Tuple[float, ...] | None:
+    if neighbor:
+        return tuple(float(value) for value in neighbor.base_demand)
+    base = example.get("base_demand")
+    if base is None:
+        return None
+    try:
+        return tuple(float(value) for value in base)
+    except (TypeError, ValueError):
+        return None
+
+
+def _usage_rows_from_ground_truth(
+    neighbor: AgentConfig | None,
+    example: Dict[str, object],
+    ground_truth: Sequence[Sequence[int]] | None,
+) -> List[List[float]] | None:
+    if not ground_truth:
+        return None
+
+    if neighbor is not None:
+        return [average_usage_for_slots(neighbor, slots) for slots in ground_truth]
+
+    base = _resolve_base_demand(neighbor, example)
+    if base is None:
+        return None
+    total = sum(base) or 1.0
+    num_slots = len(base)
+
+    def _row_for_slots(slots: Sequence[int]) -> List[float]:
+        if not slots:
+            return [0.0 for _ in range(num_slots)]
+        vectors: List[List[float]] = []
+        for slot in slots:
+            if slot < 0 or slot >= num_slots:
+                continue
+            row = [0.0 for _ in range(num_slots)]
+            row[int(slot)] = float(base[slot]) / total
+            vectors.append(row)
+        if not vectors:
+            return [0.0 for _ in range(num_slots)]
+        return [
+            sum(values) / len(vectors)
+            for values in zip(*vectors)
+        ]
+
+    return [_row_for_slots(slots) for slots in ground_truth]
+
+
+def _format_usage_row(row: Sequence[float]) -> str:
+    return "[" + ", ".join(f"{value:.2f}" for value in row) + "]"

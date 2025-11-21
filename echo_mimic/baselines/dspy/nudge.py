@@ -13,14 +13,21 @@
 # - Paths match your repo layout; robust fallbacks included.
 
 import os, json, glob, random, math, subprocess, pathlib, shutil
+from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
 from dotenv import load_dotenv
 
 import dspy
 from dspy.teleprompt import MIPROv2, BootstrapFewShot
-from echo_mimic.dspy_rate_limiter import configure_dspy_with_rate_limiting
+from echo_mimic.common.dspy_rate_limiter import configure_dspy_with_rate_limiting
 
 from echo_mimic.config import Config
+from echo_mimic.baselines.dspy.energy_dataset import (
+    format_agent_context,
+    iter_stage_agents,
+    load_cached_scenario,
+)
+from echo_mimic.domains.energy_ev.evaluation import evaluate_agent_nudge_response
 
 
 # --------------------------
@@ -230,6 +237,27 @@ class PolicyMessageSig(dspy.Signature):
     farm_input_json: str = dspy.InputField(desc="Raw contents of input.geojson for the farm.")
     message: str = dspy.OutputField(desc="Final message embedded as \\communication{...}")
 
+
+class EnergyPolicyMessageSig(dspy.Signature):
+    """
+    You craft persuasive JSON nudges for EV owners.
+    TASK: Respond with a JSON object containing:
+        - persona: copy of the persona you reference
+        - recommended_usage: list of seven usage vectors (four floats per day in [0, 1]) you want them to adopt
+        - message: persuasive rationale grounded in the provided context
+    CONTEXT YOU RECEIVE:
+      - intens_code: persona + recent local behaviour and notes
+      - connect_code: global coordinator's recommended usage plan
+      - params: extra feeder / neighbour summaries
+      - farm_input_json: full prompt text
+    Do not include code or markdown — only JSON.
+    """
+    intens_code: str = dspy.InputField(desc="Persona and local context.")
+    connect_code: str = dspy.InputField(desc="Recommended coordinated usage plan.")
+    params: str = dspy.InputField(desc="Neighbour summaries / feeder data.")
+    farm_input_json: str = dspy.InputField(desc="Global coordination prompt text.")
+    message: str = dspy.OutputField(desc="JSON string with persona, recommended_usage, and message.")
+
 class FarmerEditSig(dspy.Signature):
     """
     You are the farmer. You currently follow Python heuristics `intens_code`.
@@ -253,9 +281,12 @@ class FarmerEditSig(dspy.Signature):
 
 
 class PolicyNudge(dspy.Module):
-    def __init__(self):
+    def __init__(self, domain: str = "farm"):
         super().__init__()
-        self.policy = dspy.Predict(PolicyMessageSig)
+        if domain == "energy":
+            self.policy = dspy.Predict(EnergyPolicyMessageSig)
+        else:
+            self.policy = dspy.Predict(PolicyMessageSig)
 
     def forward(self, intens_code: str, connect_code: str, params: str, farm_input_json: str):
         out = self.policy(intens_code=intens_code, connect_code=connect_code,
@@ -290,6 +321,11 @@ def load_nudge_farms(farms_dir: str) -> List[dspy.Example]:
       - nudge/heuristics_gem_eco_conn.py   (desired)
       - connectivity/*/output_gt_directions.json (targets)
     """
+    root = Path(farms_dir)
+    energy_examples = _load_energy_nudge_cases(root)
+    if energy_examples:
+        return energy_examples
+
     examples: List[dspy.Example] = []
     for farm_path in sorted(glob.glob(os.path.join(farms_dir, "farm_*"))):
         input_geo = os.path.join(farm_path, "input.geojson")
@@ -317,6 +353,7 @@ def load_nudge_farms(farms_dir: str) -> List[dspy.Example]:
         ).with_inputs("intens_code", "connect_code", "params", "farm_input_json")
 
         example.farm = {
+            "domain": "farm",
             "farm_path": farm_path,
             "input_geojson_path": input_geo,
             "nudge_dir": nudge_dir,
@@ -329,8 +366,62 @@ def load_nudge_farms(farms_dir: str) -> List[dspy.Example]:
         examples.append(example)
     return examples
 
+
+def _load_energy_nudge_cases(root: Path) -> List[dspy.Example]:
+    examples: List[dspy.Example] = []
+    if not root.exists():
+        return examples
+    for scenario_dir, agent_dir, agent_id, scenario, agent_cfg in iter_stage_agents(root, "nudge"):
+        context_path = agent_dir / "context.json"
+        if not context_path.exists():
+            continue
+        context_payload = read_json(context_path)
+        persona_block = json.dumps(
+            {
+                "persona": context_payload.get("persona", ""),
+                "local_notes": context_payload.get("notes", ""),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        recommended_block = json.dumps(
+            {
+                "recommended_usage": context_payload.get("recommended_usage", []),
+                "recommended_slots": context_payload.get("recommended_slots", []),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        prompt_text = read_text(agent_dir / "prompt_input.txt", default="")
+        params_text = format_agent_context(agent_cfg)
+        example = dspy.Example(
+            intens_code=persona_block,
+            connect_code=recommended_block,
+            params=params_text,
+            farm_input_json=prompt_text,
+        ).with_inputs("intens_code", "connect_code", "params", "farm_input_json")
+        example.farm = {
+            "domain": "energy",
+            "farm_path": str(agent_dir),
+            "agent_dir": str(agent_dir),
+            "agent_id": agent_id,
+            "scenario_path": str(scenario_dir / "scenario.json"),
+            "context_path": str(context_path),
+            "best_policy_path": os.path.join(agent_dir, "best_policy_dspy.txt"),
+        }
+        examples.append(example)
+    return examples
+
 def filter_with_gt(examples: List[dspy.Example]) -> List[dspy.Example]:
-    return [ex for ex in examples if os.path.exists(ex.farm["gt_dir_path"])]
+    filtered: List[dspy.Example] = []
+    for ex in examples:
+        farm_meta = getattr(ex, "farm", {})
+        if farm_meta.get("domain") == "energy":
+            filtered.append(ex)
+            continue
+        if os.path.exists(farm_meta.get("gt_dir_path", "")):
+            filtered.append(ex)
+    return filtered
 
 
 # --------------------------
@@ -340,13 +431,13 @@ def filter_with_gt(examples: List[dspy.Example]) -> List[dspy.Example]:
 BEST: Dict[str, Tuple[float, str, str]] = {}  # nudge_dir -> (best_score, best_message, best_code)
 
 def metric_nudge_wrapper(example: dspy.Example, pred: dspy.Prediction, trace=None) -> float:
-    """
-    1) Take policy message from pred.message
-    2) Call Farmer LLM (fixed) to produce a COMPLETE Python script
-    3) Ensure heur_dir has input.geojson; run the script; expect output.geojson
-    4) Score against Stage-3 targets (fractions from directions)
-    5) Keep best message/code snapshots
-    """
+    farm = example.farm
+    if farm.get("domain") == "energy":
+        return _metric_energy_nudge(example, pred)
+    return _metric_farm_nudge(example, pred)
+
+
+def _metric_farm_nudge(example: dspy.Example, pred: dspy.Prediction) -> float:
     farm = example.farm
     nudge_dir = farm["nudge_dir"]
     heur_dir = farm["heur_dir"]
@@ -403,25 +494,71 @@ def metric_nudge_wrapper(example: dspy.Example, pred: dspy.Prediction, trace=Non
     return score
 
 
+def _metric_energy_nudge(example: dspy.Example, pred: dspy.Prediction) -> float:
+    farm = example.farm
+    message = (pred.message or "").strip()
+    if not message:
+        return 0.0
+
+    scenario_path = farm.get("scenario_path")
+    agent_id = farm.get("agent_id")
+    if not (scenario_path and agent_id):
+        return 0.0
+
+    scenario = load_cached_scenario(scenario_path)
+    score, _ = evaluate_agent_nudge_response(
+        message,
+        scenario=scenario,
+        agent_id=int(agent_id),
+    )
+    if score <= 0:
+        return 0.0
+
+    nudge_key = farm.get("farm_path", farm.get("nudge_dir", ""))
+    prev = BEST.get(nudge_key, (-math.inf, "", ""))
+    if score > prev[0]:
+        BEST[nudge_key] = (score, message, "")
+        best_policy_path = farm.get("best_policy_path")
+        if best_policy_path:
+            try:
+                Path(best_policy_path).write_text(message, encoding="utf-8")
+            except Exception:
+                pass
+    return score
+
+
+def _case_id(example: dspy.Example) -> str:
+    farm_meta = example.farm
+    if farm_meta.get("domain") == "energy":
+        scenario_name = Path(farm_meta.get("scenario_path", "")).parent.name or "scenario"
+        return f"{scenario_name}_agent_{farm_meta.get('agent_id', '?')}"
+    return os.path.basename(farm_meta.get("farm_path", "case"))
+
+
 # --------------------------
 # Main
 # --------------------------
 
-def main():
+def main(model_name: Optional[str] = None, data_root: Optional[str] = None):
     load_dotenv()
     cfg = Config()
+    fallback_root = os.path.join(cfg.data_dir, "crop_inventory", "syn_farms")
+    dataset_root = Path(data_root).expanduser() if data_root else Path(getattr(cfg, "farms_dir", fallback_root))
 
     # Configure LM with rate limiting (single LM used by both policy + farmer)
-    configure_dspy_with_rate_limiting(model=cfg.lm, seed=cfg.seed)
+    resolved_model = model_name or cfg.lm
+    configure_dspy_with_rate_limiting(model=resolved_model, seed=cfg.seed)
 
-    farms_dir = getattr(cfg, "farms_dir", os.path.join(cfg.data_dir, "crop_inventory", "syn_farms"))
-    all_examples = load_nudge_farms(farms_dir)
+    all_examples = load_nudge_farms(str(dataset_root))
     if not all_examples:
-        raise SystemExit(f"No nudge-ready farms found under: {farms_dir}")
+        raise SystemExit(f"No nudge-ready farms found under: {dataset_root}")
 
     trainset = filter_with_gt(all_examples)
     evalset = trainset
-    print(f"[Stage-4 DSPy] farms with GT: {len(trainset)}")
+    if not trainset:
+        raise SystemExit("No nudge cases with ground truth targets; cannot optimize.")
+    domain = trainset[0].farm.get("domain", "farm")
+    print(f"[Stage-4 DSPy] cases with GT: {len(trainset)}")
 
     # Optimizer for the POLICY only (Farmer is fixed)
     use_bootstrap = getattr(cfg, "bootstrap_demos", 0) and getattr(cfg, "bootstrap_demos", 0) > 0
@@ -430,7 +567,7 @@ def main():
 
     tele = MIPROv2(metric=metric_nudge_wrapper, auto=auto_level, seed=cfg.seed, verbose=True)
     compiled = tele.compile(
-        PolicyNudge(),
+        PolicyNudge(domain=domain),
         trainset=trainset,
         valset=evalset,
         max_bootstrapped_demos=0,
@@ -440,24 +577,24 @@ def main():
 
     # Evaluate
     scores: List[float] = []
-    per_farm: List[Tuple[str, float]] = []
+    per_case: List[Tuple[str, float]] = []
     for ex in evalset:
         pred = compiled(intens_code=ex.intens_code,
                         connect_code=ex.connect_code,
                         params=ex.params,
                         farm_input_json=ex.farm_input_json)
         s = metric_nudge_wrapper(ex, pred, trace=None)
-        farm_id = os.path.basename(ex.farm["farm_path"])
-        per_farm.append((f"{farm_id}", s))
+        farm_id = _case_id(ex)
+        per_case.append((f"{farm_id}", s))
         scores.append(s)
 
     mean_score = sum(scores) / max(1, len(scores))
-    print(f"[DSPy-Nudge 0-shot] optimizer={mode_desc} | ALL_n={len(scores)} | mean_score={mean_score:.4f}")
-    for farm_id, s in per_farm:
+    print(f"[DSPy-Nudge 0-shot] domain={domain} optimizer={mode_desc} | ALL_n={len(scores)} | mean_score={mean_score:.4f}")
+    for farm_id, s in per_case:
         print(f"  - {farm_id}: {s:.4f}")
 
     # Save compiled artifact
-    out_dir = os.path.join(farms_dir, "dspy")
+    out_dir = os.path.join(str(dataset_root), "dspy")
     os.makedirs(out_dir, exist_ok=True)
     out_json = os.path.join(out_dir, "dspy_nudge_0shot_program.json")
 

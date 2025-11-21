@@ -13,19 +13,19 @@ logging.basicConfig(level=logging.INFO)
 MODES = {"local", "global", "nudge"}
 METHODS = {"echo_mimic", "dspy", "autogen"}
 DOMAINS = {"farm", "energy"}
+MODELS = {"gemini-flash-lite-latest", "gemini-flash-latest", "gpt-5-nano", "gpt-5-mini", "gemini-2.5-flash", "gemini-2.5-pro"}
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run ECHO-MIMIC pipelines in a modular fashion.")
-    parser.add_argument("--domain", choices=sorted(DOMAINS), required=True)
-    parser.add_argument("--mode", choices=sorted(MODES), required=True)
-    parser.add_argument("--method", choices=sorted(METHODS), default="echo_mimic")
-    parser.add_argument("--agent-id", dest="agent_id", default=None)
-    parser.add_argument("--model", dest="model", default=None, help="Model name for Gemini/OpenAI")
-    parser.add_argument("--population-size", type=int, default=25)
-    parser.add_argument("--num-generations", type=int, default=25)
-    parser.add_argument("--inner-loop-size", type=int, default=10)
-    parser.add_argument("--farm-ids", type=int, nargs="+", default=None)
+    parser.add_argument("--domain", choices=sorted(DOMAINS), default="energy")
+    parser.add_argument("--mode", choices=sorted(MODES), default="nudge")
+    parser.add_argument("--method", choices=sorted(METHODS), default="autogen")
+    parser.add_argument("--agent-id", dest="agent_id", default=1)
+    parser.add_argument("--model", dest="model", default="gemini-flash-lite-latest", help="Model name for Gemini/OpenAI")
+    parser.add_argument("--population-size", type=int, default=2)
+    parser.add_argument("--num-generations", type=int, default=1)
+    parser.add_argument("--inner-loop-size", type=int, default=1)
     parser.add_argument("--use-template", action="store_true")
     parser.add_argument("--no-hint", action="store_true")
     parser.add_argument("--halstead-metrics", action="store_true")
@@ -44,7 +44,6 @@ def main(argv: Optional[List[str]] = None) -> None:
         population_size=args.population_size,
         num_generations=args.num_generations,
         inner_loop_size=args.inner_loop_size,
-        farm_ids=args.farm_ids,
         use_template=args.use_template,
         use_hint=not args.no_hint,
         halstead_metrics=args.halstead_metrics,

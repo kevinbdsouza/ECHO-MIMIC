@@ -472,7 +472,7 @@ Global coordination code:
 
 Task
 ----
-Create a JSON object with keys ``persona``, ``recommended_slots`` (seven daily indices), and ``message`` that nudges this persona
+Create a JSON object with keys ``persona``, ``recommended_usage`` (seven daily usage vectors covering all four slots with values between 0 and 1), and ``message`` that nudges this persona
 from their local behaviour towards the coordinated recommendation implied by the global heuristic above.
 Ground your message entirely on what you can infer from the two policy snippets. Be persuasive and convincing.
 
@@ -482,3 +482,4 @@ Guidelines
 • Respect the agent's preferences and comfort penalties when framing the request.
 • You can use the choice architecture and economic incentives within budget.
 • Respond with a valid, minified JSON object string only—no extra prose or markdown.
+• Each usage vector must list four floats in [0, 1] describing how much to charge in slots 0–3 on that day.

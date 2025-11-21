@@ -34,21 +34,33 @@ The framework is demonstrated on agricultural landscape management, where local 
 │   ├── baselines/               # AutoGen + DSPy comparison methods
 │   │   ├── autogen.py           # AutoGen-style planner/critic loop
 │   │   └── dspy/                # DSPy baselines (farm/global/nudge)
-│   ├── config.py                # Configuration and parameters
 │   ├── common/                  # LLM helpers, code execution, and fix utilities
+│   ├── config.py                # Configuration and parameters
+│   ├── domains/
+│   │   ├── farm/
+│   │   │   ├── __init__.py
+│   │   │   ├── create_prompts.py        # Backwards-compatible prompt exports
+│   │   │   ├── farm_evo_strat.py        # Stage 2 entry point
+│   │   │   ├── graph_evo_strat.py       # Stage 3 entry point
+│   │   │   ├── nudge_evo_strat.py       # Stage 4 entry point
+│   │   │   └── run_experimental_suite.py # Personality-nudge runner
+│   │   └── energy_ev/
+│   │       ├── __init__.py
+│   │       ├── energy_policy_evolution.py
+│   │       ├── energy_local_evo_strat.py
+│   │       ├── energy_global_evo_strat.py
+│   │       └── energy_nudge_evo_strat.py
 │   ├── prompts/                 # Prompt generation utilities
 │   ├── tools.py                 # Plotting, metrics, and helper routines
 │   ├── utils.py                 # Geometry helpers and plotting utilities
 │   ├── rate_limiter.py          # API rate limiting utilities
 │   └── dspy_rate_limiter.py     # DSPy LM wrapper with rate limiting
-├── create_prompts.py            # Backwards-compatible prompt exports
-├── *_evo_strat.py               # Evolutionary strategy entry points
-├── run_experimental_suite.py    # Personality-Nudge experimental runner
+├── main.py                      # Unified CLI entry point
 └── requirements.txt             # Python dependencies
 ```
 
-All shared runtime logic now lives under the structured `echo_mimic` package, while the
-high-level experiment drivers remain as top-level scripts.
+All shared runtime logic and experiment drivers now live under the structured `echo_mimic`
+package, keeping the repository root focused on orchestration entry points such as `main.py`.
 
 Farm-specific datasets (plots, ground-truth labels, and prompt seeds) are located under `data/farm/`,
 while the energy EV datasets remain in `data/energy_ev/`.
@@ -58,11 +70,11 @@ while the energy EV datasets remain in `data/energy_ev/`.
 ### 1. ECHO-MIMIC Framework Implementation
 
 #### ECHO (Stages 2-3): Evolutionary Crafting of Heuristics from Outcomes
-- **`farm_evo_strat.py`**: **Stage 2** - Learn baseline heuristics (reproduce profit-driven behavior)
-- **`graph_evo_strat.py`**: **Stage 3** - Learn global heuristics (maximize landscape connectivity)
+- **`echo_mimic/domains/farm/farm_evo_strat.py`**: **Stage 2** - Learn baseline heuristics (reproduce profit-driven behavior)
+- **`echo_mimic/domains/farm/graph_evo_strat.py`**: **Stage 3** - Learn global heuristics (maximize landscape connectivity)
 
 #### MIMIC (Stage 4): Mechanism Inference & Messaging
-- **`nudge_evo_strat.py`**: **Stage 4** - Behavioral nudging optimization and message evolution
+- **`echo_mimic/domains/farm/nudge_evo_strat.py`**: **Stage 4** - Behavioral nudging optimization and message evolution
 
 ### 2. DSPy Baselines (Comparison Methods)
 - **`echo_mimic/baselines/dspy/farm.py`**: **Stage 2** DSPy baseline for learning farm-level heuristics

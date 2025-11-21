@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from echo_mimic.models import build_model_client
+from echo_mimic.common.models import build_model_client
 
 
 @dataclass

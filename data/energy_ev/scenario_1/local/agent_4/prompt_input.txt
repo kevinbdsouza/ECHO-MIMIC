@@ -1,7 +1,7 @@
 ECHO Stage 2 (Imitation) — Agent 4
 ==========================================
 
-Goal: choose the slot that you think the agents would follow according to their personal objectives. Don't worry about global goals like carbon or congestion unless dictated by your personality.
+Goal: decide how much of your personal charging demand you would place in each slot over the next seven days. Keep your usage within [0, 1] per slot and stay faithful to your personal objectives; global goals such as congestion or carbon only matter when they overlap with your persona.
 
 Forecast note: observed tariffs, baseline load, and carbon intensity may drift by up to ±20% from the values below because of real-world noise.
 
@@ -62,23 +62,23 @@ neighbor_examples
 - Neighbor 3 — Position 3 night-shift nurse on the central ridge (location 3)
   Base demand: 0.60, 0.80, 0.90, 0.70
   Preferred slots: 1, 3 | Comfort penalty: 0.20
-  Ground truth min-cost slots by day: Day 1: [1]; Day 2: [1]; Day 3: [1]; Day 4: [3]; Day 5: [1]; Day 6: [1]; Day 7: [1]
+  Ground truth usage by day: Day 1: [0.07, 0.74, 0.10, 0.08]; Day 2: [0.07, 0.74, 0.10, 0.08]; Day 3: [0.07, 0.74, 0.10, 0.08]; Day 4: [0.07, 0.09, 0.10, 0.73]; Day 5: [0.07, 0.74, 0.10, 0.08]; Day 6: [0.07, 0.74, 0.10, 0.08]; Day 7: [0.07, 0.74, 0.10, 0.08]
 - Neighbor 5 — Position 5 graduate tenant commuting late from campus (location 5)
   Base demand: 0.50, 0.70, 0.60, 0.90
   Preferred slots: 0, 1 | Comfort penalty: 0.12
-  Ground truth min-cost slots by day: Day 1: [0]; Day 2: [1]; Day 3: [0]; Day 4: [0]; Day 5: [1]; Day 6: [1]; Day 7: [1]
+  Ground truth usage by day: Day 1: [0.71, 0.09, 0.08, 0.12]; Day 2: [0.06, 0.74, 0.08, 0.12]; Day 3: [0.71, 0.09, 0.08, 0.12]; Day 4: [0.71, 0.09, 0.08, 0.12]; Day 5: [0.06, 0.74, 0.08, 0.12]; Day 6: [0.06, 0.74, 0.08, 0.12]; Day 7: [0.06, 0.74, 0.08, 0.12]
 
 Task
 ----
 Write a Python script that:
 1. Loads ``scenario.json`` using only filesystem context that would be available to this agent.
-2. Chooses the slot that best matches the imitation-stage objective for each of the next seven days.
-3. Writes ``local_policy_output.json`` containing a list of seven slot indices (one per day) for this agent only.
+2. Computes a usage vector for every day listing all four slots with values between 0 and 1 (higher values mean more charging in that slot).
+3. Writes ``local_policy_output.json`` containing a list of seven usage vectors (one per day, each covering all slots) for this agent only.
 4. Saves the implementation in a file called ``policy.py`` so that running ``python policy.py`` from this directory regenerates ``local_policy_output.json``.
 
 Constraints
 -----------
 • Use only the information in this prompt. Other agents' private data must remain hidden.
-• Preserve the JSON output format and keep the payload to a list of seven integers.
+• Preserve the JSON output format and keep the payload to a list of seven slot-usage vectors, each containing four floats in [0, 1].
 • Do not attempt to coordinate with non-neighbour agents at this stage.
 • Respond with only valid Python code representing the full contents of ``policy.py``; do not include commentary or markdown fences.

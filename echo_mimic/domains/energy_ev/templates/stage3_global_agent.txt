@@ -30,18 +30,18 @@ neighbor_examples
 
 Goal
 ----
-Design Python heuristics that choose a slot for this agent on each of the next seven days to satisfy common global goals (minimize carbon, congestion) and not just personal ones, using only the neighbour information you can observe.
+Design Python heuristics that allocate per-slot usage for this agent on each of the next seven days to satisfy common global goals (minimize carbon, congestion) and not just personal ones, using only the neighbour information you can observe.
 
 Output specification
 --------------------
 1. Load ``scenario.json`` using only paths visible from the agent directory.
-2. Decide on a slot recommendation for this agent for each day that balances local comfort with global coordination.
-3. Write ``global_policy_output.json`` containing a list of seven slot indices for this agent.
+2. Decide on per-slot usage allocations for this agent for each day that balance local comfort with global coordination.
+3. Write ``global_policy_output.json`` containing a list of seven usage vectors (one per day, each covering every slot with values between 0 and 1).
 4. Save the executable script as ``policy.py`` so ``python policy.py`` recreates ``global_policy_output.json`` inside this folder.
 
 Keep reasoning local
 --------------------
 • Do not assume knowledge of non-neighbour households.
 • Explainable heuristics that can be combined with other agents will be favoured downstream.
-• Your output will be compared against the globally optimal allocation for this agent.
+• Your output will be compared against the globally optimal usage allocation for this agent.
 • Return only the Python source of ``policy.py``; omit explanations, markdown, or additional text.
