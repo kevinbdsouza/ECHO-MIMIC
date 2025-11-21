@@ -10,12 +10,6 @@ class Policy:
         self.capacity = self.scenario['capacity']
         self.base_demand = self.profile['base_demand']
         self.total_base_energy = sum(self.base_demand)
-        
-        # Initialize adjustment factors based on the nudge
-        # Nudge asks to slightly shift bias *away* from natural preference (0, 2) towards 1 and 3 to help neighbors.
-        # I will slightly decrease the weight on cost/carbon for slots 0 and 2, and slightly increase it for slots 1 and 3.
-        # This adjustment reflects a small concession for grid stability/neighbor support.
-        self.preference_adjustment = [0.0, 0.05, 0.0, 0.05] # Increase preference weight for slots 1 and 3 slightly
 
     def calculate_usage(self):
         # Persona: Battery engineer balancing budget and solar backfeed (Low Cost/Low Carbon priority, Location 1)
@@ -33,14 +27,19 @@ class Policy:
             day_carbons = day_info['Carbon']
             
             # Extract spatial carbon for location 1: Spatial carbon strings are semicolon-separated lists of spatial carbon data per feeder.
+            # We need the data corresponding to our location (loc_idx = 1). The structure seems to be:
+            # '1: c1, c2, c3, c4; 2: c1, c2, c3, c4; ...'
             spatial_carbon_data = day_info['Spatial carbon']
             
+            # Find the string corresponding to location 1 (e.g., '1: 330, 520, 560, 610')
             loc_data_part = [s.strip() for s in spatial_carbon_data.split(';') if s.strip().startswith(f'{loc_idx}:')]
             
             if loc_data_part:
+                # Extract just the numbers: '330, 520, 560, 610'
                 carbon_values_str = loc_data_part[0].split(':', 1)[1].strip()
                 day_spatial_carbons = [int(c) for c in carbon_values_str.split(', ')]
             else:
+                # Fallback, though context suggests loc_idx=1 data exists
                 day_spatial_carbons = [0] * self.num_slots
 
 
@@ -51,7 +50,7 @@ class Policy:
                 spatial_carbon = day_spatial_carbons[slot]
                 
                 # Heuristic Score: Weighting Price (Primary), Carbon (Secondary), Spatial Carbon (Tertiary)
-                # Weights: Price (1.0), Carbon (0.002), Spatial Carbon (0.001).
+                # Weights: Price (1.0), Carbon (0.002), Spatial Carbon (0.001). This ensures carbon variation heavily drives slot choice.
                 score = (1.0 * price) + (0.002 * carbon) + (0.001 * spatial_carbon)
                 scores.append(score)
 
@@ -60,29 +59,14 @@ class Policy:
             max_score = max(scores)
             
             # Map score to desirability factor (0 to 1+). Adding a small constant ensures invertibility even if all scores are identical.
-            # Base desirability calculation remains the same
             desirability = [(max_score - s) + (max_score - min_score) * 0.1 for s in scores]
             
             total_desirability = sum(desirability)
             if total_desirability == 0:
+                # Should not happen if max_score > min_score or constant added above
                 normalized_allocation = [1.0 / self.num_slots] * self.num_slots
             else:
-                # Apply the new preference adjustments to the normalized allocation weights
-                adjusted_normalized_allocation = []
-                for slot in range(self.num_slots):
-                    # Scale the base desirability contribution by the preference adjustment factor.
-                    # Since desirability is already calculated based on score inversion (higher = better),
-                    # we add the adjustment factor here to boost slots 1 and 3 slightly relative to others.
-                    # We scale the desirability value itself by (1 + adjustment)
-                    adjusted_desirability = desirability[slot] * (1.0 + self.preference_adjustment[slot])
-                    adjusted_normalized_allocation.append(adjusted_desirability)
-
-                total_adjusted_desirability = sum(adjusted_normalized_allocation)
-                
-                if total_adjusted_desirability == 0:
-                    normalized_allocation = [1.0 / self.num_slots] * self.num_slots
-                else:
-                    normalized_allocation = [d / total_adjusted_desirability for d in adjusted_normalized_allocation]
+                normalized_allocation = [d / total_desirability for d in desirability]
             
             slot_usage = []
             for slot in range(self.num_slots):
@@ -99,7 +83,21 @@ class Policy:
                 # Apply specific day constraints (Day 6 rationing)
                 if day_key == 'Day 6 (Day 6 — Maintenance advisory caps the valley transformer; slot 2 is rationed.)' and slot == 2:
                      # Cap slot 2 usage slightly more aggressively due to advisory
-                     final_usage = min(final_usage, 0.75) 
+                     final_usage = min(final_usage, 0.75)
+                
+                # --- HEURISTIC ADJUSTMENT BASED ON NUDGE ---
+                # The nudge specifically requests trusting the coordinated vector for Day 1 to manage future solar backfeed.
+                if day_key == 'Day 1 (Day 1 — Clear start to the week with feeders expecting full-slot coverage.)':
+                    if slot == 0:
+                        # Increase usage in Slot 0 (to 0.9) to align with the request to shift bulk activity there for system optimization.
+                        final_usage = max(final_usage, 0.9)
+                    elif slot in [1, 2, 3]:
+                        # Slightly reduce usage in later slots compared to raw heuristic output to enable the shift to Slot 0.
+                        # Since the nudge suggests *trusting* the vector (which implies a specific known desirable vector for Day 1),
+                        # we nudge towards Slot 0 and away from others, but only slightly modify the calculated preference.
+                        final_usage = min(final_usage, final_usage * 0.9)
+                # No explicit changes requested for other days, so the base heuristic remains.
+                # ------------------------------------------
                      
                 slot_usage.append(final_usage)
             
@@ -144,7 +142,7 @@ def run_policy_generation():
     policy_generator = Policy(scenario_data, agent_profile)
     output_data = policy_generator.generate_policy()
 
-    # Write output file
+    # Write output file (simulated write to ensure the logic runs)
     output_filename = "local_policy_output.json"
     with open(output_filename, "w") as f:
         json.dump(output_data, f, indent=4)

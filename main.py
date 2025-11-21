@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--domain", choices=sorted(DOMAINS), default="energy")
     parser.add_argument("--mode", choices=sorted(MODES), default="nudge")
     parser.add_argument("--method", choices=sorted(METHODS), default="autogen")
-    parser.add_argument("--agent-id", dest="agent_id", default=1)
+    parser.add_argument("--agent-id", dest="agent_id", default=2)
     parser.add_argument("--model", dest="model", default="gemini-flash-lite-latest", help="Model name for Gemini/OpenAI")
     parser.add_argument("--population-size", type=int, default=2)
     parser.add_argument("--num-generations", type=int, default=1)

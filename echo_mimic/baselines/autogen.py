@@ -118,6 +118,8 @@ class EnergyNudgeCase:
     recommended_block: str
     params_text: str
     prompt_text: str
+    local_policy: str
+    global_policy: str
 
 
 # ---------------------------------------------------------------------------
@@ -603,6 +605,17 @@ class AutoGenBaseline:
                 indent=2,
                 sort_keys=True,
             )
+            local_policy = self._read_policy_snippet(
+                scenario_dir / "local" / f"agent_{ag_id}",
+                ("best_policy.py", "policy.py", "candidate.py"),
+                fallback="# Local policy not yet available",
+            )
+            global_policy = self._read_policy_snippet(
+                scenario_dir / "global" / f"agent_{ag_id}",
+                ("best_policy.py", "policy.py", "candidate.py"),
+                fallback="# Global policy not yet available",
+            )
+
             cases.append(
                 EnergyNudgeCase(
                     scenario_dir=scenario_dir,
@@ -612,9 +625,18 @@ class AutoGenBaseline:
                     recommended_block=recommended_block,
                     params_text=format_agent_context(agent_cfg),
                     prompt_text=read_text(agent_dir / "prompt_input.txt", ""),
+                    local_policy=local_policy,
+                    global_policy=global_policy,
                 )
             )
         return cases
+
+    def _read_policy_snippet(self, directory: Path, candidates: Tuple[str, ...], fallback: str) -> str:
+        for name in candidates:
+            path = directory / name
+            if path.exists():
+                return read_text(path, "")
+        return fallback
 
     # ------------------------------------------------------------------
     # Case processing helpers
@@ -953,6 +975,12 @@ class AutoGenBaseline:
 
             Global recommendations:
             {case.recommended_block}
+
+            Local imitation code:
+            {case.local_policy}
+
+            Global coordination code:
+            {case.global_policy}
             """
         )
         plan = self._planner_prompt(
@@ -969,7 +997,7 @@ class AutoGenBaseline:
                 Respond with JSON only. Fields required:
                   - persona: which persona you are referencing (string).
                   - recommended_usage: seven usage vectors (four floats per day, values in [0, 1]) indicating how much to charge in each slot.
-                  - message: persuasive reasoning referencing feeder + neighbour data.
+                  - message: persuasive message moving behaviour of agent from local imitation to global coordination.
                 """
             ),
             payload={
@@ -979,6 +1007,10 @@ class AutoGenBaseline:
                 "prompt": case.prompt_text,
             },
         )
+        # Strip markdown code fences if present
+        if "```" in message:
+            message = message.replace("```json", "").replace("```", "").strip()
+
         score = 0.0
         try:
             scenario = load_cached_scenario(str(case.scenario_dir / "scenario.json"))
