@@ -2,28 +2,27 @@
 
 ## Overview
 
-ECHO-MIMIC is a computational framework that addresses collective action problems by converting global complexity into tractable, well-structured problems for individual agents. The framework discovers and supplies compact, executable heuristics and persuasive rationales that align individual incentives with collective goals.
+ECHO-MIMIC is a general computational framework for solving collective action problems—situations where individual incentives conflict with group welfare. It transforms these "Ill-Structured Problems" (ISPs) into "Well-Structured Problems" (WSPs) by discovering compact, executable heuristics and persuasive natural language rationales.
 
-Collective action problems are classic examples of Ill-Structured Problems (ISPs) where individual agents face unclear causal links between local actions and global outcomes, conflicting stakeholder objectives, and no clear algorithm to bridge micro-level choices with macro-level welfare. ECHO-MIMIC transforms these ISPs into Well-Structured Problems (WSPs) by coupling algorithmic rule discovery with tailored communication.
-
-The framework is demonstrated on agricultural landscape management, where local farming decisions impact global ecological connectivity, but the approach applies broadly to other collective action domains including decentralized resource management and policy design.
+The framework is demonstrated on two distinct domains:
+1.  **Agricultural Landscape Management**: Balancing farm-level profit with global ecological connectivity.
+2.  **Carbon-Aware EV Charging**: Balancing individual charging preferences with grid-level load flattening and carbon reduction.
 
 ![ECHO-MIMIC Framework Overview](data/farm/intro_em.png)
 
 ## Key Features
 
-- **Four-Stage Optimization Pipeline**: 
-  - **Stage 1**: Establish baseline behavior (profit-maximizing actions)
-  - **Stage 2**: Learn baseline heuristics (reproduce local profit-driven behavior)
-  - **Stage 3**: Learn global heuristics (maximize landscape connectivity)
-  - **Stage 4**: Nudge mechanisms (persuade adoption of global heuristics)
-- **ECHO-MIMIC Framework**: Two-phase approach using LLM-driven evolutionary search
-  - **ECHO** (Evolutionary Crafting of Heuristics from Outcomes): Evolves Python code snippets that encode behavioral policies (Stages 2-3)
-  - **MIMIC** (Mechanism Inference & Messaging for Individual-to-Collective Alignment): Evolves natural language messages that motivate policy adoption (Stage 4)
-- **LLM+EA Paradigm**: Large Language Models propose diverse, context-aware variants while population-level selection retains high-performing solutions
-- **ISP → WSP Transformation**: Converts cognitive burden of collective action into simple agent-level instructions
-- **Behavioral Modeling**: Tailored messaging for heterogeneous agent personalities and contexts
-- **Scalable Policy Design**: Framework for adaptive mechanism design in complex systems
+-   **General-Purpose Framework**: Applicable to any domain with local-global incentive misalignment (e.g., decentralized resource management, policy design).
+-   **Two-Phase Optimization**:
+    -   **ECHO** (Evolutionary Crafting of Heuristics from Outcomes): Evolves executable Python policies (heuristics) that optimize global objectives.
+    -   **MIMIC** (Mechanism Inference & Messaging for Individual-to-Collective Alignment): Evolves natural language messages (nudges) to persuade agents to adopt these policies.
+-   **Four-Stage Pipeline**:
+    1.  **Baseline**: Establish default, self-interested behavior.
+    2.  **Imitation**: Learn compact heuristics that reproduce the baseline.
+    3.  **Coordination**: Learn "global" heuristics that optimize the collective good.
+    4.  **Nudging**: Generate messages to shift agents from baseline to coordination heuristics.
+-   **LLM+EA Paradigm**: Combines the creativity of Large Language Models with the rigorous selection of Evolutionary Algorithms.
+-   **Behavioral Modeling**: Supports heterogeneous agent personalities (e.g., Economic, Social, Resistant) to test policy robustness.
 
 ## Project Structure
 
@@ -70,16 +69,19 @@ while the energy EV datasets remain in `data/energy_ev/`.
 ### 1. ECHO-MIMIC Framework Implementation
 
 #### ECHO (Stages 2-3): Evolutionary Crafting of Heuristics from Outcomes
-- **`echo_mimic/domains/farm/farm_evo_strat.py`**: **Stage 2** - Learn baseline heuristics (reproduce profit-driven behavior)
-- **`echo_mimic/domains/farm/graph_evo_strat.py`**: **Stage 3** - Learn global heuristics (maximize landscape connectivity)
+-   **`echo_mimic/domains/farm/farm_evo_strat.py`**: Farm Domain - Stage 2 (Imitation)
+-   **`echo_mimic/domains/farm/graph_evo_strat.py`**: Farm Domain - Stage 3 (Coordination)
+-   **`echo_mimic/domains/energy_ev/energy_local_evo_strat.py`**: EV Domain - Stage 2 (Imitation)
+-   **`echo_mimic/domains/energy_ev/energy_global_evo_strat.py`**: EV Domain - Stage 3 (Coordination)
 
 #### MIMIC (Stage 4): Mechanism Inference & Messaging
-- **`echo_mimic/domains/farm/nudge_evo_strat.py`**: **Stage 4** - Behavioral nudging optimization and message evolution
+-   **`echo_mimic/domains/farm/nudge_evo_strat.py`**: Farm Domain - Stage 4 (Nudging)
+-   **`echo_mimic/domains/energy_ev/energy_nudge_evo_strat.py`**: EV Domain - Stage 4 (Nudging)
 
 ### 2. DSPy Baselines (Comparison Methods)
-- **`echo_mimic/baselines/dspy/farm.py`**: **Stage 2** DSPy baseline for learning farm-level heuristics
-- **`echo_mimic/baselines/dspy/global_baseline.py`**: **Stage 3** DSPy baseline for global connectivity optimization
-- **`echo_mimic/baselines/dspy/nudge.py`**: **Stage 4** DSPy baseline for nudging/behavioral messaging
+-   **`echo_mimic/baselines/dspy/farm.py`**: Farm Domain baselines
+-   **`echo_mimic/baselines/dspy/global_baseline.py`**: General global optimization baseline
+-   **`echo_mimic/baselines/dspy/nudge.py`**: General nudging baseline
 
 ## Installation
 
@@ -136,30 +138,29 @@ The orchestrator also accepts `--population-size`, `--num-generations`,
 
 ### Carbon-Aware EV Charging Scenario
 
-A compact five-agent energy domain is bundled alongside the agricultural
-experiments. The scenario captures carbon-aware EV charging with feeder
-capacity limits and ships with the full four-stage pipeline assets:
+The **EV Charging Domain** models a residential neighborhood where electric vehicle owners must schedule charging.
 
-- `data/energy_ev/scenario_1/scenario.json`: core state, objectives, and neighbor
-  exemplars.
-- Stage-specific prompts under `data/energy_ev/scenario_1/{local,global,nudge}`.
-- Brute-force ground truths for imitation and collective stages, plus the global
-  optimum allocation for nudging.
-- Sample Python heuristics and a nudge message demonstrating end-to-end usage.
+-   **Local Incentive**: Charge immediately upon arrival (convenience) or when electricity is cheapest.
+-   **Global Objective**: Flatten the aggregate load curve and prioritize charging during low-carbon intensity windows.
+-   **Conflict**: Uncoordinated charging leads to demand peaks (grid stress) and higher carbon emissions.
 
-Regenerate artifacts or score new solutions with `energy_pipeline.py`:
+Run the EV domain pipeline:
 
 ```bash
-# Refresh prompts + ground truth after editing scenario.json
-python energy_pipeline.py generate
+# Energy domain with the lightweight AutoGen-style planner
+python main.py --domain energy --mode nudge --method autogen --model gpt-4o-mini
+```
 
+Or use the dedicated pipeline script for granular control:
+
+```bash
 # Score a local imitation heuristic
 python energy_pipeline.py evaluate-local data/energy_ev/scenario_1/local/heuristics_baseline.py
 
 # Score a global coordination heuristic
 python energy_pipeline.py evaluate-global data/energy_ev/scenario_1/global/heuristics_baseline.py
 
-# Validate a nudging message JSON payload
+# Validate a nudging message
 python energy_pipeline.py evaluate-nudge data/energy_ev/scenario_1/nudge/sample_nudge.json
 ```
 
@@ -178,32 +179,27 @@ The framework transforms Ill-Structured Problems (ISPs) into Well-Structured Pro
 
 **Result**: Complex collective action becomes a simple set of agent-level instructions, making previously ill-structured problems solvable in practice.
 
-### Agricultural Demonstration Domain
-The framework is demonstrated on agricultural landscape management as a canonical collective action problem:
+### Supported Domains
 
-**Agent Actions**:
-- **Margin Interventions**: Convert plot boundaries for pollination/pest control services
-- **Habitat Conversions**: Convert internal plot areas to create habitat patches
-- **Spatial Placement**: Strategic positioning to maximize landscape connectivity
+#### 1. Agricultural Landscape Management
+-   **Agents**: Farmers managing land plots.
+-   **Actions**: Margin interventions (pollinator strips), habitat conversion.
+-   **Local Goal**: Maximize Net Present Value (NPV) of crops.
+-   **Global Goal**: Maximize Integral Index of Connectivity (IIC) for the ecosystem.
+-   **Mechanism**: Nudges persuade farmers to sacrifice some yield for connectivity.
 
-**Collective Action Challenge**: 
-- **Local Incentives**: Farmers optimize Net Present Value (NPV) at the farm level
-- **Global Objective**: Landscape-scale ecological connectivity (Integral Index of Connectivity)
-- **Misalignment**: Individual profit-maximizing choices may harm overall ecosystem health
+#### 2. Carbon-Aware EV Charging
+-   **Agents**: EV owners in a neighborhood.
+-   **Actions**: Choosing charging slots (hours of the day).
+-   **Local Goal**: Maximize convenience (charge ASAP) and minimize personal cost.
+-   **Global Goal**: Minimize peak load (grid stress) and carbon footprint.
+-   **Mechanism**: Nudges persuade owners to shift charging to off-peak/low-carbon hours.
 
-**ECHO-MIMIC Solution**:
-- **ECHO**: Discovers compact Python heuristics that balance local profitability with global connectivity
-- **MIMIC**: Evolves personalized messages that persuade farmers to adopt connectivity-improving practices
-
-### Agent Heterogeneity (MIMIC Stage)
-**Farmer Personalities**:
-- **Resistant**: Highly skeptical of change, requires overwhelming evidence
-- **Economic**: Pragmatic focus on profitability and financial outcomes  
-- **Socially Influenced**: Motivated by peer practices and community validation
-
-**Message Types**:
-- **Behavioral**: Social proof, framing effects, commitment devices
-- **Economic**: Subsidies, premium payments, transparent cost-benefit analysis
+### Agent Heterogeneity
+Both domains support diverse agent personalities to test the robustness of the evolved mechanisms:
+-   **Resistant**: Skeptical, requires strong evidence/incentives.
+-   **Economic**: Driven purely by financial/utility maximization.
+-   **Socially Influenced**: Follows the crowd or community norms.
 
 ## Configuration
 
