@@ -1,4 +1,0 @@
-{
-  "status": "error",
-  "stderr": "Traceback (most recent call last):\n  File \"/Users//Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 390, in <module>\n    main()\n  File \"/Users//Documents/Obsidian_Vault/Projects/UWaterloo/RBC/code/concordia/agri_abm/ECHO-MIMIC/data/energy_ev/scenario_1/global/agent_3/_candidate_global.py\", line 365, in main\n    day_data = [v for k, v in scenario_data['days'].items() if k.startswith(day_key)][0]\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'list' object has no attribute 'items'\n"
-}

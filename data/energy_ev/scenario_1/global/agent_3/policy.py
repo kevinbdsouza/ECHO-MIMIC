@@ -1,1 +1,0 @@
-day_keys = sorted([k for k in scenario_data.get("days", {}).keys() if k.startswith("Day ")])[:DAYS_IN_WEEK]
