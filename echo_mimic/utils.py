@@ -1079,7 +1079,7 @@ if __name__ == "__main__":
     # get_lu_accuracy_from_slurm()
     print("done")
 
-    dir = "/Users/kevindsouza/Documents/Obsidian_Vault/Work/UWaterloo/RBC/code/concordia/agri_abm/data"
+    dir = ""
     geosjon = os.path.join(dir, "all_plots_conn_og.geojson")
     write_path = os.path.join(dir, "all_plots_interventions_og.geojson")
     compute_wkts_from_directions(geosjon, write_path=write_path)
